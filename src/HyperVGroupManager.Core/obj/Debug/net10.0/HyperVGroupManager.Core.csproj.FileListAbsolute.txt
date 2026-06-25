@@ -1,0 +1,11 @@
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\bin\Debug\net10.0\HyperVGroupManager.Core.deps.json
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\bin\Debug\net10.0\HyperVGroupManager.Core.dll
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\bin\Debug\net10.0\HyperVGroupManager.Core.pdb
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\obj\Debug\net10.0\HyperVGroupManager.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\obj\Debug\net10.0\HyperVGroupManager.Core.AssemblyInfoInputs.cache
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\obj\Debug\net10.0\HyperVGroupManager.Core.AssemblyInfo.cs
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\obj\Debug\net10.0\HyperVGroupManager.Core.csproj.CoreCompileInputs.cache
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\obj\Debug\net10.0\HyperVGroupManager.Core.dll
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\obj\Debug\net10.0\refint\HyperVGroupManager.Core.dll
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\obj\Debug\net10.0\HyperVGroupManager.Core.pdb
+C:\Users\suesssil\Downloads\HyperVGroupManager\src\HyperVGroupManager.Core\obj\Debug\net10.0\ref\HyperVGroupManager.Core.dll

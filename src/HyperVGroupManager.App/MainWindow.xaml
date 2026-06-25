@@ -1,0 +1,159 @@
+<Window x:Class="HyperVGroupManager.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:HyperVGroupManager.App"
+        mc:Ignorable="d"
+        Title="Hyper-V VM Group Manager" Height="800" Width="1300" MinHeight="600" MinWidth="1000">
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="180" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Kopfbereich -->
+        <Border Grid.Row="0" BorderBrush="#FFAAAAAA" BorderThickness="0,0,0,1" Padding="0,0,0,8" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Hyper-V VM Group Manager" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,30,0" />
+
+                <TextBlock Text="Ziel (Host/Cluster):" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox Text="{Binding TargetName, UpdateSourceTrigger=PropertyChanged}" Width="220" VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                <Button Content="Verbinden" Command="{Binding ConnectCommand}" Width="100" Margin="0,0,6,0" Padding="4" />
+                <Button Content="Aktualisieren" Command="{Binding RefreshCommand}" Width="100" Margin="0,0,6,0" Padding="4" />
+                <Button Content="Konfiguration exportieren" Width="160" Margin="0,0,20,0" Padding="4" Click="ExportConfigurationButton_Click" />
+
+                <TextBlock Text="Status:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock Text="{Binding ConnectionStatus}" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <TextBlock Text="(läuft...)" Foreground="DarkOrange" VerticalAlignment="Center"
+                           Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
+            </StackPanel>
+        </Border>
+
+        <!-- Hauptbereich: Gruppen | Aktionen | VM-Liste -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Linke Spalte: Gruppen -->
+            <DockPanel Grid.Column="0" Margin="0,0,8,0">
+                <TextBlock DockPanel.Dock="Top" Text="Gruppen" FontWeight="Bold" Margin="0,0,0,4" />
+                <TextBox DockPanel.Dock="Top" Margin="0,0,0,4"
+                         Text="{Binding GroupSearchText, UpdateSourceTrigger=PropertyChanged}" />
+
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button Content="Neue Gruppe" Width="90" Margin="0,0,4,0" Padding="4" Click="NewGroupButton_Click" />
+                    <Button Content="Umbenennen" Width="90" Margin="0,0,4,0" Padding="4" Click="RenameGroupButton_Click" />
+                    <Button Content="Löschen" Width="80" Padding="4" Click="DeleteGroupButton_Click" />
+                </StackPanel>
+
+                <ListBox ItemsSource="{Binding FilteredGroups}" SelectedItem="{Binding SelectedGroup}"
+                         DisplayMemberPath="Name" Margin="0,0,0,4">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Name}" />
+                                <TextBlock Text=" (" />
+                                <TextBlock Text="{Binding MemberCount}" />
+                                <TextBlock Text=")" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <!-- Mittlerer Aktionsbereich -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="4,0,4,0">
+                <Button Content="Zur Gruppe&#x0a;hinzufügen &#x2192;" Width="110" Margin="0,0,0,8" Padding="6"
+                        Command="{Binding AddSelectedVmsToGroupCommand}" />
+                <Button Content="&#x2190; Aus Gruppe&#x0a;entfernen" Width="110" Padding="6"
+                        Command="{Binding RemoveSelectedVmsFromGroupCommand}" />
+            </StackPanel>
+
+            <!-- Rechte Hauptspalte: VM-Liste -->
+            <DockPanel Grid.Column="2">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                    <TextBlock Text="VMs" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,16,0" />
+                    <TextBlock Text="Suche:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Width="200" Margin="0,0,16,0" />
+                    <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <ComboBox Width="180" SelectedValue="{Binding SelectedFilterMode}" SelectedValuePath="Tag">
+                        <ComboBoxItem Content="Alle VMs" Tag="All" />
+                        <ComboBoxItem Content="VMs ohne Gruppe" Tag="WithoutGroup" />
+                        <ComboBoxItem Content="VMs der ausgewählten Gruppe" Tag="SelectedGroup" />
+                        <ComboBoxItem Content="Laufende VMs" Tag="Running" />
+                        <ComboBoxItem Content="Ausgeschaltete VMs" Tag="Off" />
+                    </ComboBox>
+                </StackPanel>
+
+                <DataGrid x:Name="VirtualMachinesGrid" ItemsSource="{Binding VirtualMachines}"
+                          SelectedItem="{Binding SelectedVm}"
+                          AutoGenerateColumns="False" SelectionMode="Extended" SelectionUnit="FullRow"
+                          IsReadOnly="True" CanUserAddRows="False"
+                          SelectionChanged="VirtualMachinesGrid_SelectionChanged">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="180" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding State}" Width="100" />
+                        <DataGridTextColumn Header="Owner-Node" Binding="{Binding OwnerNode}" Width="120" />
+                        <DataGridTextColumn Header="Aktuelle Gruppen" Binding="{Binding GroupNames, Converter={StaticResource StringListJoinConverter}}" Width="260" />
+                        <DataGridTextColumn Header="Gruppenzahl" Binding="{Binding GroupNames.Count}" Width="90" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Grid>
+
+        <!-- Unterer Bereich: geplante Änderungen -->
+        <DockPanel Grid.Row="2" Margin="0,8,0,8">
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="Geplante Änderungen" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,16,0" />
+                <Button Content="Änderungen anwenden" Padding="4" Margin="0,0,6,0" Command="{Binding ApplyChangesCommand}" />
+                <Button Content="Änderungen verwerfen" Padding="4" Command="{Binding DiscardChangesCommand}" />
+            </StackPanel>
+
+            <DataGrid ItemsSource="{Binding PendingChanges}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Aktion" Binding="{Binding ChangeType, Converter={StaticResource ChangeTypeToGermanConverter}}" Width="160" />
+                    <DataGridTextColumn Header="VM" Binding="{Binding VmName}" Width="160" />
+                    <DataGridTextColumn Header="Gruppe" Binding="{Binding GroupName}" Width="200" />
+                    <DataGridTextColumn Header="Beschreibung" Binding="{Binding Description}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </DockPanel>
+
+        <!-- Statusleiste -->
+        <StatusBar Grid.Row="3">
+            <StatusBarItem>
+                <TextBlock>
+                    <TextBlock Text="VMs: " /><TextBlock Text="{Binding VirtualMachineCount}" />
+                </TextBlock>
+            </StatusBarItem>
+            <Separator />
+            <StatusBarItem>
+                <TextBlock>
+                    <TextBlock Text="Gruppen: " /><TextBlock Text="{Binding GroupCount}" />
+                </TextBlock>
+            </StatusBarItem>
+            <Separator />
+            <StatusBarItem>
+                <TextBlock>
+                    <TextBlock Text="Geplante Änderungen: " /><TextBlock Text="{Binding PendingChangeCount}" />
+                </TextBlock>
+            </StatusBarItem>
+            <Separator />
+            <StatusBarItem>
+                <TextBlock>
+                    <TextBlock Text="Letzte Aktualisierung: " /><TextBlock Text="{Binding LastRefreshedAt, StringFormat='HH:mm:ss'}" />
+                </TextBlock>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <TextBlock Text="{Binding StatusMessages[0]}" />
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

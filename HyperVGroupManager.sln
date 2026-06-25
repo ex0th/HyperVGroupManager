@@ -1,0 +1,48 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36915.13 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDD-11D0-9F8D-86A0B0E6E0DA}") = "src", "src", "{2CBA69FD-23CA-4B01-85AA-A3B3CA8203AD}"
+EndProject
+Project("{2150E333-8FDD-11D0-9F8D-86A0B0E6E0DA}") = "tests", "tests", "{0AAB2397-9919-4E14-9689-AFD223624088}"
+EndProject
+Project("{2150E333-8FDD-11D0-9F8D-86A0B0E6E0DA}") = "docs", "docs", "{A941C89F-B07F-4607-A88D-B08C551937CC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HyperVGroupManager.App", "src\HyperVGroupManager.App\HyperVGroupManager.App.csproj", "{7E311349-D24C-4F02-8B8D-42C0ACE2A067}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HyperVGroupManager.Core", "src\HyperVGroupManager.Core\HyperVGroupManager.Core.csproj", "{5580C0DB-0D28-4147-82AE-AB056520ECAE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HyperVGroupManager.Tests", "tests\HyperVGroupManager.Tests\HyperVGroupManager.Tests.csproj", "{AF1A8BA5-2CA2-4690-82A7-468526EB58F8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7E311349-D24C-4F02-8B8D-42C0ACE2A067}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7E311349-D24C-4F02-8B8D-42C0ACE2A067}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7E311349-D24C-4F02-8B8D-42C0ACE2A067}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7E311349-D24C-4F02-8B8D-42C0ACE2A067}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5580C0DB-0D28-4147-82AE-AB056520ECAE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5580C0DB-0D28-4147-82AE-AB056520ECAE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5580C0DB-0D28-4147-82AE-AB056520ECAE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5580C0DB-0D28-4147-82AE-AB056520ECAE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF1A8BA5-2CA2-4690-82A7-468526EB58F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF1A8BA5-2CA2-4690-82A7-468526EB58F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF1A8BA5-2CA2-4690-82A7-468526EB58F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF1A8BA5-2CA2-4690-82A7-468526EB58F8}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{7E311349-D24C-4F02-8B8D-42C0ACE2A067} = {2CBA69FD-23CA-4B01-85AA-A3B3CA8203AD}
+		{5580C0DB-0D28-4147-82AE-AB056520ECAE} = {2CBA69FD-23CA-4B01-85AA-A3B3CA8203AD}
+		{AF1A8BA5-2CA2-4690-82A7-468526EB58F8} = {0AAB2397-9919-4E14-9689-AFD223624088}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {846B3BB3-D6B9-4AEE-B8DD-DE36E6025C90}
+	EndGlobalSection
+EndGlobal
