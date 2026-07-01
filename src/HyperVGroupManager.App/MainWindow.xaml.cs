@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using HyperVGroupManager.App.Services;
 using HyperVGroupManager.App.ViewModels;
 using HyperVGroupManager.App.Views;
 using HyperVGroupManager.Core.Interfaces;
@@ -17,13 +18,15 @@ namespace HyperVGroupManager.App
     {
         private readonly MainViewModel _viewModel;
         private readonly IHyperVGroupService _hyperVGroupService;
+        private readonly EmailReportService _emailReportService;
 
-        public MainWindow(MainViewModel viewModel, IHyperVGroupService hyperVGroupService)
+        public MainWindow(MainViewModel viewModel, IHyperVGroupService hyperVGroupService, EmailReportService emailReportService)
         {
             InitializeComponent();
 
             _viewModel = viewModel;
             _hyperVGroupService = hyperVGroupService;
+            _emailReportService = emailReportService;
             DataContext = _viewModel;
 
             _viewModel.ErrorOccurred += OnViewModelErrorOccurred;
@@ -96,6 +99,11 @@ namespace HyperVGroupManager.App
             }
 
             new ClusterConfigDialog(_hyperVGroupService, targetName) { Owner = this }.ShowDialog();
+        }
+
+        private void EmailReportButton_Click(object sender, RoutedEventArgs e)
+        {
+            new EmailReportConfigDialog(_emailReportService, _viewModel.TargetName) { Owner = this }.ShowDialog();
         }
 
         private async void ExportConfigurationButton_Click(object sender, RoutedEventArgs e)

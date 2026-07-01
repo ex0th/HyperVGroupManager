@@ -76,6 +76,7 @@ namespace HyperVGroupManager.App
             services.AddSingleton<ILogService, LogService>();
             services.AddSingleton<IPowerShellExecutor, PowerShellExecutor>();
             services.AddSingleton<IHyperVGroupService, HyperVGroupService>();
+            services.AddSingleton<EmailReportService>();
             services.AddSingleton<MainViewModel>();
             services.AddSingleton<MainWindow>();
         }

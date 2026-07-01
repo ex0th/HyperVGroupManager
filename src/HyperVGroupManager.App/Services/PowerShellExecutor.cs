@@ -39,6 +39,10 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
         "Export-HVGMConfiguration",
         "Get-HVGMClusterConfig",
         "Set-HVGMConfigStoreRootPath",
+        "Send-HVGMUntaggedVMsReport",
+        "Register-HVGMEmailReportTask",
+        "Unregister-HVGMEmailReportTask",
+        "Get-HVGMEmailReportTaskStatus",
     };
 
     private readonly PowerShellOptions _options;
