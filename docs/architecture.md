@@ -55,6 +55,29 @@ Views (XAML)  ->  ViewModels  ->  IHyperVGroupService (Core.Interfaces)
 5. Ein Timeout (`appsettings.json: PowerShell.TimeoutSeconds`, Standard 120s) beendet den Prozess
    bei Überschreitung und löst eine `PowerShellExecutionException` aus.
 
+### Multiline-Stdout-Schutz in PowerShellExecutor
+
+`OutputDataReceived` liest stdout zeilenweise. PowerShell 5.1 kann trotz `-Compress` mehrere Zeilen
+ausgeben, wenn Fehlertext unescapte Zeilenumbrüche enthält. `PowerShellExecutor` extrahiert daher
+die letzte nicht-leere JSON-Zeile (erkennbar an `{` oder `[`):
+
+```csharp
+var rawLines = stdOutBuilder.ToString()
+    .Split('\n')
+    .Select(l => l.Trim('\r', ' '))
+    .Where(l => l.Length > 0)
+    .ToArray();
+
+var stdOut = rawLines.Length > 1
+    ? (rawLines.LastOrDefault(l => l.StartsWith("{") || l.StartsWith("[")) ?? string.Join(string.Empty, rawLines))
+    : (rawLines.FirstOrDefault() ?? string.Empty);
+```
+
+Bei einem JSON-Fehler wird die vollständige Rohausgabe ins Log geschrieben:
+```csharp
+logService.LogError($"Ungültiges JSON von PowerShell-Befehl '{commandName}'. Raw output: {rawResult.RawOutput}", ex);
+```
+
 ## Change-Queue (geplante Änderungen)
 
 `VmGroupChangeQueue` (Core) verwaltet `VmGroupMembershipChange`-Einträge:
@@ -85,12 +108,49 @@ Ergebnis-Dialog zeigt das Resultat jeder einzelnen Änderung an.
 * Die Prüfung "Gruppe leer?" vor dem Löschen verwendet den zuletzt geladenen `MemberCount`, nicht
   bereits geplante (aber noch nicht angewendete) Remove-Änderungen.
 
-## Hinweis: PowerShell-5.1-Fallstrick in Invoke-HVGMChangeSet
+## PowerShell-5.1-Fallstricke
 
-`Invoke-HVGMChangeSet.ps1` sammelt die Pro-Änderung-Ergebnisse bewusst in einem einfachen
-PowerShell-Array (`$itemResults = @(); $itemResults += ...`) statt in einem
-`System.Collections.Generic.List[object]`. Letzteres führte unter Windows PowerShell 5.1 beim
-Aufruf von `New-HVGMResult -Data @($itemResults)` zu `System.ArgumentException: Argument types
-do not match` (ein bekannter Binder-Fehler in `PSEnumerableBinder.MaybeDebase`). Der Fehler wurde
-durch manuellen End-to-End-Test des Bootstrap-Pfads gefunden und behoben - reine Unit-Tests mit
-Fakes hätten ihn nicht aufgedeckt, da sie das PowerShell-Modul nie wirklich ausführen.
+### Nicht-ASCII-Zeichen in String-Literalen
+
+PS 5.1 liest `.ps1`-Dateien ohne UTF-8 BOM als Windows-1252. Nicht-ASCII-Zeichen wie der
+En-Dash `–` (UTF-8: `E2 80 93`) werden fehlinterpretiert: Byte `0x93` entspricht in Windows-1252
+dem linken Anführungszeichen `"`, was einen String vorzeitig schließt und einen Syntaxfehler
+verursacht.
+
+**Regel:** In PowerShell-5.1-Skripten innerhalb von String-Literalen ausschließlich ASCII-Zeichen
+verwenden. In Kommentaren sind Nicht-ASCII-Zeichen unproblematisch.
+
+### ConvertTo-Json escapt Zeilenumbrüche in Fehlermeldungen nicht
+
+PS 5.1 escapt `\r\n` in Exception-Meldungen beim Aufruf von `ConvertTo-Json -Compress` nicht
+zuverlässig. Enthält eine Exception-Meldung einen Zeilenumbruch, erscheint er als echter Umbruch
+in der Ausgabe, was das JSON-Parsing in C# bricht.
+
+**Fix:** Fehlermeldungen vor der JSON-Serialisierung bereinigen:
+```powershell
+$safeMessage = ($_.Exception.Message -replace '[\r\n\t]+', ' ').Trim()
+```
+Dieses Muster ist in allen `catch`-Blöcken des Moduls angewendet.
+
+### PS 5.1 kennt ConvertFrom-Json -AsHashtable nicht
+
+`Invoke-HVGMCommand.ps1` übernimmt die PSCustomObject-Eigenschaften manuell in eine Hashtable,
+damit sie als benannte Parameter gesplattet werden können (`@parametersTable`).
+
+### PS 5.1 Generic List + New-HVGMResult Binder-Fehler
+
+`Invoke-HVGMChangeSet.ps1` sammelt Ergebnisse in einem einfachen PowerShell-Array (`@()`) statt
+`System.Collections.Generic.List[object]`. Letzteres führt unter PS 5.1 beim Aufruf von
+`New-HVGMResult -Data @($itemResults)` zu `System.ArgumentException: Argument types do not match`
+(bekannter Binder-Fehler in `PSEnumerableBinder.MaybeDebase`). Reine Unit-Tests mit Fakes hätten
+diesen Fehler nicht aufgedeckt, da sie das PowerShell-Modul nie wirklich ausführen.
+
+### UTF-8-Kodierung erzwingen
+
+Der Bootstrap-Einstiegspunkt `Invoke-HVGMCommand.ps1` setzt explizit:
+```powershell
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding            = [System.Text.Encoding]::UTF8
+```
+Damit kommen deutsche Sonderzeichen in JSON-Ausgaben korrekt beim C#-Prozess an, der mit
+`StandardOutputEncoding = Encoding.UTF8` liest.

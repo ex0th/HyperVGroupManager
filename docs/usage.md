@@ -8,7 +8,7 @@
 * Administrative Rechte werden empfohlen (manche Hyper-V-Vorgänge schlagen sonst fehl).
 * Windows PowerShell 5.1 muss als `powershell.exe` verfügbar sein.
 
-## Build & Start
+## Build & Start (Entwicklung)
 
 ```powershell
 dotnet build HyperVGroupManager.sln
@@ -19,29 +19,30 @@ dotnet run --project src\HyperVGroupManager.App
 ## Portable Executable bauen (Self-Contained, Single-File)
 
 Erzeugt eine eigenständige `.exe`, die ohne installiertes .NET auf dem Zielrechner läuft
-(Größe ca. 60 MB, da die .NET-10-Runtime eingebettet ist). `appsettings.json` und der
-`PowerShell`-Ordner bleiben als separate Dateien neben der `.exe` - einfach den gesamten
-Publish-Ordner kopieren und auf einem anderen Windows-x64-Rechner ausführen.
+(ca. 60 MB, da die .NET-10-Runtime eingebettet ist). Die Publish-Einstellungen sind dauerhaft
+im `.csproj` hinterlegt - der Befehl braucht keine zusätzlichen `-p:` Flags:
 
 ```powershell
-dotnet publish src\HyperVGroupManager.App\HyperVGroupManager.App.csproj `
-    -c Release `
-    -r win-x64 `
-    --self-contained true `
-    -p:PublishSingleFile=true `
-    -p:IncludeNativeLibrariesForSelfExtract=true `
-    -p:EnableCompressionInSingleFile=true `
-    -o publish\win-x64
+dotnet publish src\HyperVGroupManager.App\HyperVGroupManager.App.csproj -c Release -o publish\win-x64
 ```
 
-Ergebnis in `publish\win-x64\`:
+### Ergebnis in `publish\win-x64\`
 
-* `HyperVGroupManager.App.exe` - einzige benötigte Programmdatei (Runtime eingebettet)
-* `appsettings.json` - Konfiguration (optional, sonst Standardwerte)
-* `PowerShell\` - das Backend-Modul (zwingend erforderlich, muss neben der `.exe` bleiben)
-* `*.pdb` - Debug-Symbole, für die Verteilung nicht erforderlich und können gelöscht werden
+| Datei/Ordner | Erforderlich | Beschreibung |
+|---|---|---|
+| `HyperVGroupManager.App.exe` | Ja | Anwendung mit eingebetteter .NET-Runtime |
+| `PowerShell\` | Ja | PowerShell-Backend-Modul (muss neben der `.exe` liegen) |
+| `appsettings.json` | Nein | Konfiguration; fehlt die Datei, gelten Standardwerte |
+| `wpfgfx_cor3.dll` u.a. | Ja | Native WPF-Bibliotheken (5 DLLs, von .NET nicht eingebettet) |
+| `*.pdb` | Nein | Debug-Symbole, können für die Verteilung gelöscht werden |
 
-Für andere Architekturen `-r win-x64` durch z. B. `-r win-arm64` ersetzen.
+Die fünf nativen WPF-DLLs (`wpfgfx_cor3.dll`, `PenImc_cor3.dll`, `PresentationNative_cor3.dll`,
+`vcruntime140_cor3.dll`, `D3DCompiler_47_cor3.dll`) müssen neben der `.exe` bleiben.
+Sie lassen sich mit `IncludeNativeLibrariesForSelfExtract=true` in die `.exe` einbetten, was
+die Startzeit jedoch erhöht, da sie bei jedem Start ins Temp-Verzeichnis extrahiert werden.
+
+Für andere Architekturen `-r win-x64` durch z. B. `-r win-arm64` ersetzen und in der `.csproj`
+`<RuntimeIdentifier>` anpassen.
 
 ## Bedienung
 
@@ -67,6 +68,9 @@ Für andere Architekturen `-r win-x64` durch z. B. `-r win-arm64` ersetzen.
 ## Logging
 
 Logs liegen unter `%LocalAppData%\HyperVGroupManager\Logs\HyperVGroupManager-yyyy-MM-dd.log`.
+
+Bei einem JSON-Fehler aus dem PowerShell-Prozess wird die vollständige Rohausgabe ins Log
+geschrieben (`Raw output: ...`), um die Fehlerursache zu diagnostizieren.
 
 ## Konfiguration
 

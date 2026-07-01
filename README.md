@@ -26,10 +26,18 @@ PowerShell-JSON-Vertrag: [docs/powershell-json-contract.md](docs/powershell-json
 * `src/HyperVGroupManager.PowerShell` - PowerShell-Backend-Modul (Windows PowerShell 5.1)
 * `tests/HyperVGroupManager.Tests` - xUnit-Tests (PowerShell wird in Tests nie wirklich ausgeführt)
 
+## Sicherheitsgrundsätze
+
+* Die Anwendung **verändert keine Veeam-Jobs** und greift nicht auf die Veeam-API zu.
+* Sie verwaltet ausschließlich Hyper-V-VM-Gruppen (`VMCollectionType`).
+* Kein `Invoke-Expression`, keine String-Verkettung von PowerShell-Code.
+* Parameter werden ausschließlich als JSON-Datei übergeben (nie als Kommandozeilenargument).
+* Passwörter und geheime Daten werden nicht geloggt.
+
 ## MVP-Umfang
 
 Enthalten: native VM-Gruppen (VMCollectionType) auf Einzelhost und Cluster, Mehrfachmitgliedschaft,
-geplante Änderungen mit Vorschau, JSON-Export.
+geplante Änderungen mit Vorschau, JSON-Export, geplanter E-Mail-Bericht über VMs ohne Gruppe.
 
-Nicht enthalten (siehe Aufgabenstellung): Veeam-API-Anbindung, ManagementCollectionType,
+Nicht enthalten (außerhalb des Scopes): Veeam-API-Anbindung, ManagementCollectionType,
 verschachtelte Gruppen, SCVMM, AD-Anmeldung, Installer, Auto-Update.
