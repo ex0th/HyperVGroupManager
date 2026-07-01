@@ -59,7 +59,7 @@ function Send-HVGMUntaggedVMsReport {
         }
 
         $dateStr  = Get-Date -Format 'dd.MM.yyyy'
-        $subject  = "Hyper-V VMs ohne Gruppe – $TargetName ($dateStr)"
+        $subject  = "Hyper-V VMs ohne Gruppe - $TargetName ($dateStr)"
 
         # E-Mail-Body (Plain Text)
         $lines = [System.Collections.Generic.List[string]]::new()
@@ -109,6 +109,7 @@ function Send-HVGMUntaggedVMsReport {
         New-HVGMResult -Success $true -Data $msg
     }
     catch {
-        New-HVGMResult -Success $false -Errors @($_.Exception.Message)
+        $safeMessage = ($_.Exception.Message -replace '[\r\n\t]+', ' ').Trim()
+        New-HVGMResult -Success $false -Errors @($safeMessage)
     }
 }

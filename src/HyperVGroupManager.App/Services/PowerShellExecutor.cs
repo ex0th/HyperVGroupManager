@@ -116,7 +116,7 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
         }
         catch (JsonException ex)
         {
-            logService.LogError($"Ungültiges JSON von PowerShell-Befehl '{commandName}'.", ex);
+            logService.LogError($"Ungültiges JSON von PowerShell-Befehl '{commandName}'. Raw output: {rawResult.RawOutput}", ex);
             throw new PowerShellExecutionException(
                 $"Die Antwort von PowerShell-Befehl '{commandName}' konnte nicht verarbeitet werden (ungültiges JSON).", ex);
         }
@@ -184,7 +184,18 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
                 $"Der Vorgang '{commandName}' hat das Zeitlimit von {_options.TimeoutSeconds} Sekunden überschritten und wurde abgebrochen.");
         }
 
-        var stdOut = stdOutBuilder.ToString().Trim();
+        // Falls PS trotz -Compress mehrere Zeilen schreibt (z.B. weil eine Fehlermeldung
+        // einen unescapten Zeilenumbruch enthielt), die letzte nicht-leere JSON-Zeile nehmen.
+        var rawLines = stdOutBuilder.ToString()
+            .Split('\n')
+            .Select(l => l.Trim('\r', ' '))
+            .Where(l => l.Length > 0)
+            .ToArray();
+
+        var stdOut = rawLines.Length > 1
+            ? (rawLines.LastOrDefault(l => l.StartsWith("{") || l.StartsWith("[")) ?? string.Join(string.Empty, rawLines))
+            : (rawLines.FirstOrDefault() ?? string.Empty);
+
         var stdErr = stdErrBuilder.ToString().Trim();
 
         _logService.LogInformation($"PowerShell-Befehl '{commandName}' beendet mit Exit-Code {process.ExitCode}.");

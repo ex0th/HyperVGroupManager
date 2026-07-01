@@ -16,6 +16,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# UTF-8 erzwingen, damit deutsche Sonderzeichen in JSON-Ausgaben korrekt ankommen.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding            = [System.Text.Encoding]::UTF8
+
 try {
     Import-Module -Name $ModuleManifestPath -Force
 
@@ -35,10 +39,13 @@ try {
     $result | ConvertTo-Json -Depth 10 -Compress
 }
 catch {
+    # Zeilenumbrüche im Fehlertext entfernen – PS 5.1 escapt sie in ConvertTo-Json
+    # nicht zuverlässig, was das JSON aufbricht.
+    $safeMessage = ($_.Exception.Message -replace '[\r\n\t]+', ' ').Trim()
     [pscustomobject]@{
         Success  = $false
         Data     = $null
-        Errors   = @($_.Exception.Message)
+        Errors   = @($safeMessage)
         Warnings = @()
     } | ConvertTo-Json -Depth 10 -Compress
 }
