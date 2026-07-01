@@ -37,6 +37,8 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
         "Remove-HVGMGroupMember",
         "Invoke-HVGMChangeSet",
         "Export-HVGMConfiguration",
+        "Get-HVGMClusterConfig",
+        "Set-HVGMConfigStoreRootPath",
     };
 
     private readonly PowerShellOptions _options;

@@ -14,13 +14,15 @@
         [guid]$VmId,
 
         [Parameter(Mandatory)]
-        [guid]$GroupId
+        [guid]$GroupId,
+
+        [string]$GroupName = $null
     )
 
     try {
         $target = Resolve-HVGMTarget -TargetName $TargetName
         $vm = Get-HVGMVmById -Target $target -VmId $VmId
-        $group = Get-HVGMGroupById -Target $target -GroupId $GroupId
+        $group = Get-HVGMGroupById -Target $target -GroupId $GroupId -GroupName $GroupName
 
         $warnings = @()
         $alreadyMember = @($group.VMMembers | Where-Object { $_.Id -eq $vm.Id })
@@ -29,10 +31,10 @@
             $warnings += "VM '$($vm.Name)' ist bereits Mitglied der Gruppe '$($group.Name)'."
         }
         else {
-            Add-VMGroupMember -VMGroup $group -VM $vm -ErrorAction Stop
+            Add-VMGroupMember -VMGroup $group -VM $vm -Confirm:$false -ErrorAction Stop
         }
 
-        New-HVGMResult -Success $true -Data ([pscustomobject]@{ VmId = $vm.Id; GroupId = $group.Id }) -Warnings $warnings
+        New-HVGMResult -Success $true -Data ([pscustomobject]@{ VmId = $vm.Id; GroupId = $group.InstanceId }) -Warnings $warnings
     }
     catch {
         New-HVGMResult -Success $false -Errors @($_.Exception.Message)

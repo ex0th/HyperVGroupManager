@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using HyperVGroupManager.App.ViewModels;
 using HyperVGroupManager.App.Views;
+using HyperVGroupManager.Core.Interfaces;
 using HyperVGroupManager.Core.Models;
 using Microsoft.Win32;
 
@@ -15,12 +16,14 @@ namespace HyperVGroupManager.App
     public partial class MainWindow : Window
     {
         private readonly MainViewModel _viewModel;
+        private readonly IHyperVGroupService _hyperVGroupService;
 
-        public MainWindow(MainViewModel viewModel)
+        public MainWindow(MainViewModel viewModel, IHyperVGroupService hyperVGroupService)
         {
             InitializeComponent();
 
             _viewModel = viewModel;
+            _hyperVGroupService = hyperVGroupService;
             DataContext = _viewModel;
 
             _viewModel.ErrorOccurred += OnViewModelErrorOccurred;
@@ -81,6 +84,18 @@ namespace HyperVGroupManager.App
             {
                 _viewModel.DeleteGroupCommand.Execute(null);
             }
+        }
+
+        private void ClusterConfigButton_Click(object sender, RoutedEventArgs e)
+        {
+            var targetName = _viewModel.TargetName;
+            if (string.IsNullOrWhiteSpace(targetName))
+            {
+                MessageBox.Show(this, "Bitte zuerst einen Host/Cluster verbinden.", "Hinweis", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            new ClusterConfigDialog(_hyperVGroupService, targetName) { Owner = this }.ShowDialog();
         }
 
         private async void ExportConfigurationButton_Click(object sender, RoutedEventArgs e)

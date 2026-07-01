@@ -26,4 +26,8 @@ public interface IHyperVGroupService
     Task RemoveVmFromGroupAsync(string targetName, Guid vmId, Guid groupId, CancellationToken cancellationToken);
 
     Task<ApplyChangesResult> ApplyChangesAsync(string targetName, IReadOnlyList<VmGroupMembershipChange> changes, CancellationToken cancellationToken);
+
+    Task<ClusterConfigInfo> GetClusterConfigAsync(string targetName, CancellationToken cancellationToken);
+
+    Task SetConfigStoreRootPathAsync(string targetName, string path, CancellationToken cancellationToken);
 }

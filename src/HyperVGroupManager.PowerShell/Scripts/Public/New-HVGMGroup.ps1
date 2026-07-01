@@ -25,10 +25,19 @@
             throw "Eine Gruppe mit dem Namen '$GroupName' existiert auf '$TargetName' bereits."
         }
 
-        $newGroup = New-VMGroup -Name $GroupName -GroupType VMCollectionType -ComputerName $hostName -ErrorAction Stop
+        $null = New-VMGroup -Name $GroupName -GroupType VMCollectionType -ComputerName $hostName -ErrorAction Stop
+        # New-VMGroup may return the object with a null Id on some Windows Server versions before
+        # the WMI store is flushed. Look up by name to get the committed, non-null Id.
+        $newGroup = Get-VMGroup -ComputerName $hostName -Name $GroupName -ErrorAction SilentlyContinue
+        if ($null -eq $newGroup) {
+            throw "Gruppe '$GroupName' wurde erstellt, konnte aber per Get-VMGroup nicht gefunden werden."
+        }
+        # Hyper-V stores the GUID in InstanceId (not Id). Fall back to deterministic GUID when empty.
+        $instanceId = $newGroup.InstanceId
+        $groupId = if ($null -ne $instanceId -and $instanceId -ne [guid]::Empty) { $instanceId.ToString() } else { (Get-HVGMDeterministicGroupGuid $GroupName).ToString() }
 
         New-HVGMResult -Success $true -Data ([pscustomobject]@{
-            Id   = $newGroup.Id
+            Id   = $groupId
             Name = $newGroup.Name
         })
     }

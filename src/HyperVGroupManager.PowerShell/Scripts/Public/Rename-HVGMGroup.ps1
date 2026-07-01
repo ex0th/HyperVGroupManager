@@ -23,13 +23,13 @@
         $hostName = Get-HVGMGroupHostName -Target $target
 
         $duplicate = Get-VMGroup -ComputerName $hostName -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -eq $NewName -and $_.Id -ne $GroupId }
+            Where-Object { $_.Name -eq $NewName }
 
         if ($duplicate) {
             throw "Eine Gruppe mit dem Namen '$NewName' existiert bereits."
         }
 
-        Rename-VMGroup -VMGroup $group -NewName $NewName -ErrorAction Stop
+        Rename-VMGroup -VMGroup $group -NewName $NewName -Confirm:$false -ErrorAction Stop
 
         New-HVGMResult -Success $true -Data ([pscustomobject]@{ Id = $GroupId; Name = $NewName })
     }

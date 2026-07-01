@@ -169,6 +169,29 @@ public sealed class HyperVGroupService : IHyperVGroupService
         return new ApplyChangesResult { Success = result.Success, Results = result.Data };
     }
 
+    public async Task<ClusterConfigInfo> GetClusterConfigAsync(string targetName, CancellationToken cancellationToken)
+    {
+        var result = await _executor.ExecuteAsync<ClusterConfigInfo>(
+            "Get-HVGMClusterConfig",
+            new { TargetName = targetName },
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Success || result.Data is null)
+            throw new HyperVConnectionException($"Cluster-Konfiguration konnte nicht gelesen werden: {JoinErrors(result.Errors)}");
+
+        return result.Data;
+    }
+
+    public async Task SetConfigStoreRootPathAsync(string targetName, string path, CancellationToken cancellationToken)
+    {
+        var result = await _executor.ExecuteAsync<object>(
+            "Set-HVGMConfigStoreRootPath",
+            new { TargetName = targetName, Path = path },
+            cancellationToken).ConfigureAwait(false);
+
+        ThrowIfFailed(result, "ConfigStoreRootPath konnte nicht gesetzt werden");
+    }
+
     private void ThrowIfFailed<T>(Core.Results.PowerShellResult<T> result, string operationDescription)
     {
         if (result.Success)

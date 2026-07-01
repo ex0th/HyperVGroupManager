@@ -1,0 +1,18 @@
+# Build-Ausgaben
+bin/
+obj/
+publish/
+
+# User-spezifische IDE-Dateien
+*.user
+*.suo
+.vs/
+*.rsuser
+
+# NuGet
+*.nupkg
+packages/
+project.lock.json
+
+# Logs
+*.log

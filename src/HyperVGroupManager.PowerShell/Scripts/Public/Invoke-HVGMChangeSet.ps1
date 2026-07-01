@@ -20,6 +20,11 @@
     # Binder-Fehler ("Argument types do not match") beim Aufruf von New-HVGMResult aus.
     $itemResults = @()
     $stopProcessing = $false
+    # Maps client-side placeholder GUIDs to real Hyper-V GUIDs. Needed when a CreateGroup and
+    # subsequent AddMembership/RemoveMembership/RenameGroup/DeleteGroup for the same group are in
+    # the same changeset: Hyper-V assigns its own GUID during New-VMGroup, which differs from the
+    # GUID the C# side generated as a placeholder before the apply run.
+    $groupIdMap = @{}
 
     foreach ($change in $Changes) {
         if ($stopProcessing) {
@@ -39,18 +44,29 @@
             switch ($change.ChangeType) {
                 'CreateGroup' {
                     $itemResult = New-HVGMGroup -TargetName $TargetName -GroupName $change.GroupName
+                    if ($itemResult.Success -and $null -ne $itemResult.Data -and $null -ne $itemResult.Data.Id) {
+                        $clientId = [string]$change.GroupId
+                        $realId   = [string]$itemResult.Data.Id
+                        if ($clientId -ne $realId) {
+                            $groupIdMap[$clientId] = $realId
+                        }
+                    }
                 }
                 'RenameGroup' {
-                    $itemResult = Rename-HVGMGroup -TargetName $TargetName -GroupId $change.GroupId -NewName $change.GroupName
+                    $resolvedId = if ($groupIdMap.ContainsKey([string]$change.GroupId)) { $groupIdMap[[string]$change.GroupId] } else { $change.GroupId }
+                    $itemResult = Rename-HVGMGroup -TargetName $TargetName -GroupId $resolvedId -NewName $change.GroupName
                 }
                 'AddMembership' {
-                    $itemResult = Add-HVGMGroupMember -TargetName $TargetName -VmId $change.VmId -GroupId $change.GroupId
+                    $resolvedId = if ($groupIdMap.ContainsKey([string]$change.GroupId)) { $groupIdMap[[string]$change.GroupId] } else { $change.GroupId }
+                    $itemResult = Add-HVGMGroupMember -TargetName $TargetName -VmId $change.VmId -GroupId $resolvedId -GroupName $change.GroupName
                 }
                 'RemoveMembership' {
-                    $itemResult = Remove-HVGMGroupMember -TargetName $TargetName -VmId $change.VmId -GroupId $change.GroupId
+                    $resolvedId = if ($groupIdMap.ContainsKey([string]$change.GroupId)) { $groupIdMap[[string]$change.GroupId] } else { $change.GroupId }
+                    $itemResult = Remove-HVGMGroupMember -TargetName $TargetName -VmId $change.VmId -GroupId $resolvedId -GroupName $change.GroupName
                 }
                 'DeleteGroup' {
-                    $itemResult = Remove-HVGMGroup -TargetName $TargetName -GroupId $change.GroupId
+                    $resolvedId = if ($groupIdMap.ContainsKey([string]$change.GroupId)) { $groupIdMap[[string]$change.GroupId] } else { $change.GroupId }
+                    $itemResult = Remove-HVGMGroup -TargetName $TargetName -GroupId $resolvedId -GroupName $change.GroupName
                 }
                 default {
                     throw "Unbekannter Änderungstyp '$($change.ChangeType)'."

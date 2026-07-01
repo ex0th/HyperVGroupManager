@@ -5,7 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:HyperVGroupManager.App"
         mc:Ignorable="d"
-        Title="Hyper-V VM Group Manager" Height="800" Width="1300" MinHeight="600" MinWidth="1000">
+        Title="Hyper-V VM Group Manager" Height="800" Width="1300" MinHeight="600" MinWidth="1000"
+        Icon="Assets/app-icon.png">
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -24,7 +25,8 @@
 
                 <Button Content="Verbinden" Command="{Binding ConnectCommand}" Width="100" Margin="0,0,6,0" Padding="4" />
                 <Button Content="Aktualisieren" Command="{Binding RefreshCommand}" Width="100" Margin="0,0,6,0" Padding="4" />
-                <Button Content="Konfiguration exportieren" Width="160" Margin="0,0,20,0" Padding="4" Click="ExportConfigurationButton_Click" />
+                <Button Content="Konfiguration exportieren" Width="160" Margin="0,0,6,0" Padding="4" Click="ExportConfigurationButton_Click" />
+                <Button Content="Cluster-Einstellungen" Width="150" Margin="0,0,20,0" Padding="4" Click="ClusterConfigButton_Click" />
 
                 <TextBlock Text="Status:" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <TextBlock Text="{Binding ConnectionStatus}" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0" />
@@ -54,7 +56,7 @@
                 </StackPanel>
 
                 <ListBox ItemsSource="{Binding FilteredGroups}" SelectedItem="{Binding SelectedGroup}"
-                         DisplayMemberPath="Name" Margin="0,0,0,4">
+                         Margin="0,0,0,4">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">

@@ -10,19 +10,21 @@
         [string]$TargetName,
 
         [Parameter(Mandatory)]
-        [guid]$GroupId
+        [guid]$GroupId,
+
+        [string]$GroupName = $null
     )
 
     try {
         $target = Resolve-HVGMTarget -TargetName $TargetName
-        $group = Get-HVGMGroupById -Target $target -GroupId $GroupId
+        $group = Get-HVGMGroupById -Target $target -GroupId $GroupId -GroupName $GroupName
 
         $memberCount = @($group.VMMembers).Count
         if ($memberCount -gt 0) {
             throw "Die Gruppe '$($group.Name)' enthält noch $memberCount Mitglied(er) und kann nicht gelöscht werden. Entfernen Sie zuerst alle Mitgliedschaften."
         }
 
-        Remove-VMGroup -VMGroup $group -ErrorAction Stop
+        Remove-VMGroup -VMGroup $group -Confirm:$false -ErrorAction Stop
 
         New-HVGMResult -Success $true -Data ([pscustomobject]@{ Id = $GroupId; Name = $group.Name })
     }
