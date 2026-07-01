@@ -91,19 +91,7 @@ namespace HyperVGroupManager.App
 
         private void ClusterConfigButton_Click(object sender, RoutedEventArgs e)
         {
-            var targetName = _viewModel.TargetName;
-            if (string.IsNullOrWhiteSpace(targetName))
-            {
-                MessageBox.Show(this, "Bitte zuerst einen Host/Cluster verbinden.", "Hinweis", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            new ClusterConfigDialog(_hyperVGroupService, targetName) { Owner = this }.ShowDialog();
-        }
-
-        private void EmailReportButton_Click(object sender, RoutedEventArgs e)
-        {
-            new EmailReportConfigDialog(_emailReportService, _viewModel.TargetName) { Owner = this }.ShowDialog();
+            new ClusterConfigDialog(_hyperVGroupService, _viewModel.TargetName ?? "", _emailReportService) { Owner = this }.ShowDialog();
         }
 
         private async void ExportConfigurationButton_Click(object sender, RoutedEventArgs e)
