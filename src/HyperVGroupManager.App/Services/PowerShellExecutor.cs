@@ -188,13 +188,20 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
         // einen unescapten Zeilenumbruch enthielt), die letzte nicht-leere JSON-Zeile nehmen.
         var rawLines = stdOutBuilder.ToString()
             .Split('\n')
-            .Select(l => l.Trim('\r', ' '))
+            .Select(l => l.Trim('\r', ' ', '﻿'))
             .Where(l => l.Length > 0)
             .ToArray();
 
         var stdOut = rawLines.Length > 1
             ? (rawLines.LastOrDefault(l => l.StartsWith("{") || l.StartsWith("[")) ?? string.Join(string.Empty, rawLines))
             : (rawLines.FirstOrDefault() ?? string.Empty);
+
+        // Manche Cmdlets (insb. Cluster-/WMI-Aufrufe) schreiben Warning-/Verbose-/Progress-Text
+        // asynchron auf denselben stdout-Handle und können ihn mitten in die JSON-Zeile mischen.
+        // Auf das äußerste {...} bzw. [...] zuschneiden, um führenden/nachgestellten Fremdtext
+        // zu entfernen; Text, der mitten in die JSON-Struktur gemischt wurde, bleibt davon
+        // unberührt und führt weiterhin zu einem Parse-Fehler (siehe ParseEnvelope).
+        stdOut = TrimToJsonEnvelope(stdOut);
 
         var stdErr = stdErrBuilder.ToString().Trim();
 
@@ -227,6 +234,29 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
             RawOutput = stdOut,
             ExitCode = process.ExitCode,
         };
+    }
+
+    /// <summary>
+    /// Schneidet eine Zeile auf den Bereich vom ersten '{' bzw. '[' bis zum letzten passenden
+    /// '}' bzw. ']' zu, damit führender/nachgestellter Fremdtext (z. B. eine WARNING-Zeile ohne
+    /// eigenen Zeilenumbruch) nicht die JSON-Deserialisierung verhindert.
+    /// </summary>
+    private static string TrimToJsonEnvelope(string line)
+    {
+        var start = line.IndexOfAny(new[] { '{', '[' });
+        if (start < 0)
+        {
+            return line;
+        }
+
+        var closing = line[start] == '{' ? '}' : ']';
+        var end = line.LastIndexOf(closing);
+        if (end < start)
+        {
+            return line;
+        }
+
+        return line.Substring(start, end - start + 1);
     }
 
     private void TryKillProcess(Process process)

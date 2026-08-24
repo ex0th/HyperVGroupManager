@@ -16,9 +16,22 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# UTF-8 erzwingen, damit deutsche Sonderzeichen in JSON-Ausgaben korrekt ankommen.
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding            = [System.Text.Encoding]::UTF8
+# Warning/Verbose/Debug/Information/Progress der zugrunde liegenden Hyper-V-/Cluster-Cmdlets
+# unterdrücken. Bei -File mit umgeleitetem stdout schreibt PowerShell diese Streams ebenfalls
+# auf stdout, teils asynchron beim Aufräumen von CIM/WMI-Sitzungen (z. B. bei Cluster-Verbindungen)
+# - dadurch kann Text mitten in die per ConvertTo-Json erzeugte JSON-Zeile geschrieben werden
+# und sie strukturell zerstören. Nur der finale $result-Aufruf soll auf stdout landen.
+$WarningPreference     = 'SilentlyContinue'
+$VerbosePreference     = 'SilentlyContinue'
+$DebugPreference       = 'SilentlyContinue'
+$InformationPreference = 'SilentlyContinue'
+$ProgressPreference    = 'SilentlyContinue'
+
+# UTF-8 ohne BOM erzwingen, damit deutsche Sonderzeichen in JSON-Ausgaben korrekt ankommen
+# und keine BOM-Bytes vor der JSON-Ausgabe landen (Encoding.UTF8 hat eine Preamble).
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = $utf8NoBom
+$OutputEncoding            = $utf8NoBom
 
 try {
     Import-Module -Name $ModuleManifestPath -Force

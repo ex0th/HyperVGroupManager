@@ -17,7 +17,13 @@
         'Add-HVGMGroupMember',
         'Remove-HVGMGroupMember',
         'Invoke-HVGMChangeSet',
-        'Export-HVGMConfiguration'
+        'Export-HVGMConfiguration',
+        'Get-HVGMClusterConfig',
+        'Set-HVGMConfigStoreRootPath',
+        'Send-HVGMUntaggedVMsReport',
+        'Register-HVGMEmailReportTask',
+        'Unregister-HVGMEmailReportTask',
+        'Get-HVGMEmailReportTaskStatus'
     )
 
     CmdletsToExport   = @()
