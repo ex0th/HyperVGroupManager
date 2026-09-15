@@ -50,20 +50,25 @@ Für andere Architekturen `-r win-x64` durch z. B. `-r win-arm64` ersetzen und i
    zeigt Nicht verbunden / Verbinde / Verbunden / Fehler. Warnungen (z. B. fehlende
    Administratorrechte) erscheinen in der Statusleiste unten rechts.
 2. **Aktualisieren** lädt VMs und Gruppen erneut vom Zielsystem.
-3. **Gruppen verwalten** (linke Spalte): Neue Gruppe, Umbenennen, Löschen. Eine nicht leere Gruppe
-   kann nicht gelöscht werden - der Dialog zeigt die Mitgliederzahl und einen Hinweis an.
+3. **Gruppen verwalten** (linke Karte): Neue Gruppe, Umbenennen, Löschen. Eine nicht leere Gruppe
+   kann erst gelöscht werden, nachdem ihre Mitgliedschaften zur Entfernung geplant wurden.
 4. **VMs filtern/suchen** (rechte Spalte): Freitextsuche sowie Filter (Alle VMs, VMs ohne Gruppe,
    VMs der ausgewählten Gruppe, laufende/ausgeschaltete VMs). Mehrfachauswahl im DataGrid ist
    möglich (Strg/Shift-Klick).
-5. **Mitgliedschaften planen** (mittlerer Bereich): ausgewählte VMs einer Gruppe hinzufügen oder
-   aus ihr entfernen. Dies ändert noch nichts auf dem Server, sondern erzeugt nur einen Eintrag in
-   den **geplanten Änderungen** (unterer Bereich).
-6. **Änderungen anwenden** führt alle geplanten Änderungen in sinnvoller Reihenfolge aus
+5. **Mitgliedschaften planen**: ausgewählte VMs einer Gruppe hinzufügen oder aus ihr entfernen.
+   Die Tabellen und Kennzahlen zeigen sofort den erwarteten Zustand, auf dem Server wird noch
+   nichts geändert. Auch eine neu geplante Gruppe kann sofort Mitglieder erhalten.
+6. **Prüfen und anwenden** validiert alle Änderungen lokal und führt sie anschließend in sinnvoller Reihenfolge aus
    (Gruppen erstellen -> umbenennen -> Mitglieder hinzufügen -> entfernen -> Gruppen löschen) und
    zeigt anschließend ein Ergebnis-Dialogfenster. **Änderungen verwerfen** leert die Liste ohne
    etwas anzuwenden.
 7. **Konfiguration exportieren** speichert die aktuell geladenen Gruppen (inkl. Mitglieder) als
-   JSON-Datei über einen Speichern-Dialog.
+   JSON-Datei über einen Speichern-Dialog. Bei einer offenen Queue wird der erwartete Zustand
+   exportiert.
+
+Ein Wechsel zu einem anderen Ziel ist mit offenen Änderungen blockiert. Nach Timeout, Abbruch oder
+einer nicht eindeutig zuordenbaren Backend-Antwort sperrt die Anwendung weitere Schreibvorgänge,
+bis **Aktualisieren** den tatsächlichen Zustand erfolgreich neu geladen hat.
 
 ## Logging
 
@@ -85,13 +90,15 @@ geschrieben (`Raw output: ...`), um die Fehlerursache zu diagnostizieren.
   },
   "Application": {
     "DefaultGroupPrefix": "VEEAM_",
-    "ConfirmBeforeApply": true,
-    "PreventDeletingNonEmptyGroups": true
+    "ConfirmBeforeApply": true
   }
 }
 ```
 
 Fehlt die Datei, verwendet die Anwendung diese Standardwerte und startet trotzdem.
+
+SMTP-Kennwörter werden in `%LocalAppData%\HyperVGroupManager` benutzergebunden per Windows DPAPI
+gespeichert. Eine geplante E-Mail-Aufgabe muss daher unter demselben Windows-Konto laufen.
 
 ## Manueller PowerShell-Test (ohne UI)
 

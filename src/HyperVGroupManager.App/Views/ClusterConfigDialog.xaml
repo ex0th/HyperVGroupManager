@@ -24,8 +24,8 @@
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0" Text="Aktueller ConfigStoreRootPath:" FontWeight="Bold" Margin="0,0,0,4" />
-                    <Border Grid.Row="1" Background="#FFF0F0F0" BorderBrush="#FFCCCCCC" BorderThickness="1" Padding="6,4" Margin="0,0,0,12">
-                        <TextBlock x:Name="CurrentPathTextBlock" TextWrapping="Wrap" Text="(wird geladen...)" Foreground="Gray" />
+                    <Border Grid.Row="1" Background="{DynamicResource ControlFillColorSecondaryBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="8,6" Margin="0,0,0,12">
+                        <TextBlock x:Name="CurrentPathTextBlock" TextWrapping="Wrap" Text="(wird geladen...)" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     </Border>
 
                     <TextBlock Grid.Row="2" x:Name="NewPathLabel" Text="Neuer Pfad:" Margin="0,0,0,4" />
@@ -108,7 +108,7 @@
                     <TextBox   Grid.Row="2" Grid.Column="1" x:Name="RecipientsTextBox" Height="80"
                                AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0,0,0,2" />
                     <TextBlock Grid.Row="3" Grid.Column="1" Text="(eine Adresse pro Zeile)"
-                               FontSize="11" Foreground="Gray" Margin="0,0,0,8" />
+                               FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,8" />
 
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="Nachrichtenvorspann:" VerticalAlignment="Top" Margin="0,4,8,0" />
                     <TextBox   Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
@@ -142,7 +142,7 @@
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Aufgabenname:" VerticalAlignment="Center" Margin="0,0,8,8" />
                     <TextBlock Grid.Row="2" Grid.Column="1" x:Name="TaskNameTextBlock" VerticalAlignment="Center"
-                               Margin="0,0,0,8" Foreground="Gray" />
+                               Margin="0,0,0,8" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
 
                     <Border Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
                             x:Name="StatusBorder" BorderThickness="1" Padding="8,6" Margin="0,4,0,8">
@@ -156,7 +156,7 @@
                     </WrapPanel>
 
                     <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap"
-                               FontSize="11" Foreground="Gray" VerticalAlignment="Bottom"
+                               FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Bottom"
                                Text="Der Bericht wird täglich zur angegebenen Uhrzeit gesendet und listet alle VMs auf, die keiner Hyper-V-Gruppe zugeordnet sind. Die Aufgabe läuft unter dem aktuellen Windows-Benutzerkonto." />
                 </Grid>
             </TabItem>

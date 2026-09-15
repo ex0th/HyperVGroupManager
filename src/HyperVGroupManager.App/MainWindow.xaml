@@ -3,159 +3,287 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:HyperVGroupManager.App"
+        xmlns:coreServices="clr-namespace:HyperVGroupManager.Core.Services;assembly=HyperVGroupManager.Core"
         mc:Ignorable="d"
-        Title="Hyper-V VM Group Manager" Height="800" Width="1300" MinHeight="600" MinWidth="1000"
-        Icon="Assets/app-icon.png">
-    <Grid Margin="8">
+        Title="Hyper-V VM Group Manager"
+        Height="860" Width="1380" MinHeight="700" MinWidth="1080"
+        Icon="Assets/app-icon.png"
+        WindowStartupLocation="CenterScreen"
+        Closing="MainWindow_Closing"
+        Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+    <Grid Margin="24,18,24,14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="180" />
+            <RowDefinition Height="220" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Kopfbereich -->
-        <Border Grid.Row="0" BorderBrush="#FFAAAAAA" BorderThickness="0,0,0,1" Padding="0,0,0,8" Margin="0,0,0,8">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Hyper-V VM Group Manager" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,30,0" />
-
-                <TextBlock Text="Ziel (Host/Cluster):" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <TextBox Text="{Binding TargetName, UpdateSourceTrigger=PropertyChanged}" Width="220" VerticalAlignment="Center" Margin="0,0,10,0" />
-
-                <Button Content="Verbinden" Command="{Binding ConnectCommand}" Width="100" Margin="0,0,6,0" Padding="4" />
-                <Button Content="Aktualisieren" Command="{Binding RefreshCommand}" Width="100" Margin="0,0,6,0" Padding="4" />
-                <Button Content="Konfiguration exportieren" Width="160" Margin="0,0,6,0" Padding="4" Click="ExportConfigurationButton_Click" />
-                <Button Content="Einstellungen" Width="110" Margin="0,0,20,0" Padding="4" Click="ClusterConfigButton_Click" />
-
-                <TextBlock Text="Status:" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <TextBlock Text="{Binding ConnectionStatus}" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0" />
-                <TextBlock Text="(läuft...)" Foreground="DarkOrange" VerticalAlignment="Center"
-                           Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
-            </StackPanel>
-        </Border>
-
-        <!-- Hauptbereich: Gruppen | Aktionen | VM-Liste -->
-        <Grid Grid.Row="1">
+        <!-- Titel und Verbindung -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="Hyper-V VM Group Manager"
+                           FontSize="26" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                <TextBlock Text="Native VM-Gruppen sicher planen, prüfen und anwenden"
+                           Style="{StaticResource CaptionStyle}" Margin="0,3,0,0" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Margin="0,0,10,0">
+                    <TextBlock Text="HOST ODER CLUSTER" Style="{StaticResource CaptionStyle}" Margin="2,0,0,4" />
+                    <TextBox Text="{Binding TargetName, UpdateSourceTrigger=PropertyChanged}"
+                             Width="250" ToolTip="DNS-Name eines Hyper-V-Hosts oder Failover-Clusters" />
+                </StackPanel>
+                <Button Content="Verbinden" Command="{Binding ConnectCommand}"
+                        Style="{StaticResource AccentButtonStyle}" Margin="0,20,8,0" />
+                <Button Content="Aktualisieren" Command="{Binding RefreshCommand}"
+                        Margin="0,20,8,0" ToolTip="Serverzustand neu laden; geplante Änderungen bleiben erhalten" />
+                <Button Content="Exportieren" Margin="0,20,8,0"
+                        Click="ExportConfigurationButton_Click" ToolTip="Erwartete Konfiguration als JSON exportieren" />
+                <Button Content="Einstellungen" Margin="0,20,0,0"
+                        Click="ClusterConfigButton_Click" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Kennzahlen -->
+        <Grid Grid.Row="1" Margin="-6,0,-6,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Linke Spalte: Gruppen -->
-            <DockPanel Grid.Column="0" Margin="0,0,8,0">
-                <TextBlock DockPanel.Dock="Top" Text="Gruppen" FontWeight="Bold" Margin="0,0,0,4" />
-                <TextBox DockPanel.Dock="Top" Margin="0,0,0,4"
-                         Text="{Binding GroupSearchText, UpdateSourceTrigger=PropertyChanged}" />
+            <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="6,0">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="VMs" Style="{StaticResource CaptionStyle}" />
+                        <TextBlock Text="{Binding VirtualMachineCount}" Style="{StaticResource MetricValueStyle}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="Virtuelle Maschinen" Style="{StaticResource CaptionStyle}" VerticalAlignment="Bottom" />
+                </Grid>
+            </Border>
 
-                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
-                    <Button Content="Neue Gruppe" Width="90" Margin="0,0,4,0" Padding="4" Click="NewGroupButton_Click" />
-                    <Button Content="Umbenennen" Width="90" Margin="0,0,4,0" Padding="4" Click="RenameGroupButton_Click" />
-                    <Button Content="Löschen" Width="80" Padding="4" Click="DeleteGroupButton_Click" />
-                </StackPanel>
+            <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="6,0">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Ohne Gruppe" Style="{StaticResource CaptionStyle}" />
+                        <TextBlock Text="{Binding UntaggedVirtualMachineCount}" Style="{StaticResource MetricValueStyle}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="Prüfbedarf" Style="{StaticResource CaptionStyle}" VerticalAlignment="Bottom" />
+                </Grid>
+            </Border>
 
-                <ListBox ItemsSource="{Binding FilteredGroups}" SelectedItem="{Binding SelectedGroup}"
-                         Margin="0,0,0,4">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Name}" />
-                                <TextBlock Text=" (" />
-                                <TextBlock Text="{Binding MemberCount}" />
-                                <TextBlock Text=")" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </DockPanel>
+            <Border Grid.Column="2" Style="{StaticResource CardStyle}" Margin="6,0">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Gruppen" Style="{StaticResource CaptionStyle}" />
+                        <TextBlock Text="{Binding GroupCount}" Style="{StaticResource MetricValueStyle}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="VMCollectionType" Style="{StaticResource CaptionStyle}" VerticalAlignment="Bottom" />
+                </Grid>
+            </Border>
 
-            <!-- Mittlerer Aktionsbereich -->
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="4,0,4,0">
-                <Button Content="Zur Gruppe&#x0a;hinzufügen &#x2192;" Width="110" Margin="0,0,0,8" Padding="6"
-                        Command="{Binding AddSelectedVmsToGroupCommand}" />
-                <Button Content="&#x2190; Aus Gruppe&#x0a;entfernen" Width="110" Padding="6"
-                        Command="{Binding RemoveSelectedVmsFromGroupCommand}" />
-            </StackPanel>
-
-            <!-- Rechte Hauptspalte: VM-Liste -->
-            <DockPanel Grid.Column="2">
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
-                    <TextBlock Text="VMs" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,16,0" />
-                    <TextBlock Text="Suche:" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Width="200" Margin="0,0,16,0" />
-                    <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <ComboBox Width="180" SelectedValue="{Binding SelectedFilterMode}" SelectedValuePath="Tag">
-                        <ComboBoxItem Content="Alle VMs" Tag="All" />
-                        <ComboBoxItem Content="VMs ohne Gruppe" Tag="WithoutGroup" />
-                        <ComboBoxItem Content="VMs der ausgewählten Gruppe" Tag="SelectedGroup" />
-                        <ComboBoxItem Content="Laufende VMs" Tag="Running" />
-                        <ComboBoxItem Content="Ausgeschaltete VMs" Tag="Off" />
-                    </ComboBox>
-                </StackPanel>
-
-                <DataGrid x:Name="VirtualMachinesGrid" ItemsSource="{Binding VirtualMachines}"
-                          SelectedItem="{Binding SelectedVm}"
-                          AutoGenerateColumns="False" SelectionMode="Extended" SelectionUnit="FullRow"
-                          IsReadOnly="True" CanUserAddRows="False"
-                          SelectionChanged="VirtualMachinesGrid_SelectionChanged">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="180" />
-                        <DataGridTextColumn Header="Status" Binding="{Binding State}" Width="100" />
-                        <DataGridTextColumn Header="Owner-Node" Binding="{Binding OwnerNode}" Width="120" />
-                        <DataGridTextColumn Header="Aktuelle Gruppen" Binding="{Binding GroupNames, Converter={StaticResource StringListJoinConverter}}" Width="260" />
-                        <DataGridTextColumn Header="Gruppenzahl" Binding="{Binding GroupNames.Count}" Width="90" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </DockPanel>
+            <Border Grid.Column="3" Style="{StaticResource CardStyle}" Margin="6,0">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Geplant" Style="{StaticResource CaptionStyle}" />
+                        <TextBlock Text="{Binding PendingChangeCount}" Style="{StaticResource MetricValueStyle}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="noch nicht angewendet" Style="{StaticResource CaptionStyle}" VerticalAlignment="Bottom" />
+                </Grid>
+            </Border>
         </Grid>
 
-        <!-- Unterer Bereich: geplante Änderungen -->
-        <DockPanel Grid.Row="2" Margin="0,8,0,8">
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="Geplante Änderungen" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,16,0" />
-                <Button Content="Änderungen anwenden" Padding="4" Margin="0,0,6,0" Command="{Binding ApplyChangesCommand}" />
-                <Button Content="Änderungen verwerfen" Padding="4" Command="{Binding DiscardChangesCommand}" />
+        <!-- Arbeitsbereich -->
+        <Grid Grid.Row="2" Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="310" MinWidth="260" />
+                <ColumnDefinition Width="14" />
+                <ColumnDefinition Width="*" MinWidth="560" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource CardStyle}" Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="16,14,16,10">
+                        <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Sicherungsgruppen" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="Mehrfachzuordnungen sind erlaubt" Style="{StaticResource CaptionStyle}" Margin="0,2,0,0" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="＋ Neu" Click="NewGroupButton_Click"
+                                IsEnabled="{Binding CanModifyPlan}" />
+                    </Grid>
+
+                    <TextBox Grid.Row="1" Margin="16,0,16,10"
+                             Text="{Binding GroupSearchText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Gruppen durchsuchen" />
+
+                    <ListBox Grid.Row="2" ItemsSource="{Binding FilteredGroups}"
+                             SelectedItem="{Binding SelectedGroup}"
+                             BorderThickness="0" Background="Transparent"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="6,5" MinHeight="32">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="●" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                               FontSize="10" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" />
+                                    <Border Grid.Column="2" Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                            CornerRadius="10" Padding="8,2" Margin="8,0,0,0">
+                                        <TextBlock Text="{Binding MemberCount}" Style="{StaticResource CaptionStyle}" />
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <Grid Grid.Row="3" Margin="16,10,16,14">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Button Content="Umbenennen" Click="RenameGroupButton_Click"
+                                IsEnabled="{Binding CanModifyPlan}" />
+                        <Button Grid.Column="2" Content="Löschen" Click="DeleteGroupButton_Click"
+                                IsEnabled="{Binding CanModifyPlan}" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource CardStyle}" Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="16,14,16,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Virtuelle Maschinen" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="Die Tabelle zeigt bereits den erwarteten Zustand nach allen geplanten Änderungen"
+                                       Style="{StaticResource CaptionStyle}" Margin="0,2,0,0" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Zur Gruppe hinzufügen"
+                                Command="{Binding AddSelectedVmsToGroupCommand}" />
+                        <Button Grid.Column="3" Content="Aus Gruppe entfernen"
+                                Command="{Binding RemoveSelectedVmsFromGroupCommand}" />
+                    </Grid>
+
+                    <Grid Grid.Row="1" Margin="16,0,16,10">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="220" /></Grid.ColumnDefinitions>
+                        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Name, Status, Owner-Node oder Gruppe durchsuchen" />
+                        <ComboBox Grid.Column="2" SelectedValue="{Binding SelectedFilterMode}" SelectedValuePath="Tag">
+                            <ComboBoxItem Content="Alle VMs" Tag="{x:Static coreServices:VmFilterMode.All}" />
+                            <ComboBoxItem Content="VMs ohne Gruppe" Tag="{x:Static coreServices:VmFilterMode.WithoutGroup}" />
+                            <ComboBoxItem Content="Ausgewählte Gruppe" Tag="{x:Static coreServices:VmFilterMode.SelectedGroup}" />
+                            <ComboBoxItem Content="Laufende VMs" Tag="{x:Static coreServices:VmFilterMode.Running}" />
+                            <ComboBoxItem Content="Ausgeschaltete VMs" Tag="{x:Static coreServices:VmFilterMode.Off}" />
+                        </ComboBox>
+                    </Grid>
+
+                    <DataGrid x:Name="VirtualMachinesGrid" Grid.Row="2"
+                              ItemsSource="{Binding VirtualMachines}"
+                              SelectedItem="{Binding SelectedVm}"
+                              AutoGenerateColumns="False" SelectionMode="Extended" SelectionUnit="FullRow"
+                              IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                              GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                              BorderThickness="0" Margin="1,0,1,1"
+                              SelectionChanged="VirtualMachinesGrid_SelectionChanged">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" MinWidth="160" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding State}" Width="110" />
+                            <DataGridTextColumn Header="Owner-Node" Binding="{Binding OwnerNode}" Width="150" />
+                            <DataGridTextColumn Header="Gruppen" Binding="{Binding GroupNames, Converter={StaticResource StringListJoinConverter}}" Width="3*" MinWidth="220" />
+                            <DataGridTextColumn Header="Anzahl" Binding="{Binding GroupNames.Count}" Width="80" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Änderungsvorschau -->
+        <Border Grid.Row="3" Style="{StaticResource CardStyle}" Padding="0" Margin="0,0,0,12">
+            <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Grid Margin="16,12,16,10">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="8" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Änderungsvorschau" Style="{StaticResource SectionTitleStyle}" />
+                        <Border Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="10" Padding="8,2" Margin="10,0,0,0">
+                            <TextBlock Text="{Binding PendingChangeCount}" Style="{StaticResource CaptionStyle}" />
+                        </Border>
+                        <TextBlock Text="  ·  lokal geprüft, noch nicht auf dem Server ausgeführt"
+                                   Style="{StaticResource CaptionStyle}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Verwerfen" Command="{Binding DiscardChangesCommand}" />
+                    <Button Grid.Column="3" Content="Prüfen und anwenden"
+                            Style="{StaticResource AccentButtonStyle}"
+                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanConverter}}"
+                            Click="ApplyChangesButton_Click" />
+                </Grid>
+
+                <DataGrid Grid.Row="1" ItemsSource="{Binding PendingChanges}"
+                          AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                          GridLinesVisibility="Horizontal" HeadersVisibility="Column" BorderThickness="0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Aktion" Binding="{Binding ChangeType, Converter={StaticResource ChangeTypeToGermanConverter}}" Width="155" />
+                        <DataGridTextColumn Header="VM" Binding="{Binding VmName}" Width="180" />
+                        <DataGridTextColumn Header="Gruppe" Binding="{Binding GroupName}" Width="220" />
+                        <DataGridTextColumn Header="Beschreibung" Binding="{Binding Description}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <!-- Status -->
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="●" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" Margin="0,0,7,0" />
+                <TextBlock Text="{Binding ConnectionStatus}" FontWeight="SemiBold" />
+                <TextBlock Text="  ·  Ziel: " Style="{StaticResource CaptionStyle}" />
+                <TextBlock Text="{Binding ConnectedTargetName}" Style="{StaticResource CaptionStyle}" />
             </StackPanel>
-
-            <DataGrid ItemsSource="{Binding PendingChanges}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Aktion" Binding="{Binding ChangeType, Converter={StaticResource ChangeTypeToGermanConverter}}" Width="160" />
-                    <DataGridTextColumn Header="VM" Binding="{Binding VmName}" Width="160" />
-                    <DataGridTextColumn Header="Gruppe" Binding="{Binding GroupName}" Width="200" />
-                    <DataGridTextColumn Header="Beschreibung" Binding="{Binding Description}" Width="*" />
-                </DataGrid.Columns>
-            </DataGrid>
-        </DockPanel>
-
-        <!-- Statusleiste -->
-        <StatusBar Grid.Row="3">
-            <StatusBarItem>
-                <TextBlock>
-                    <TextBlock Text="VMs: " /><TextBlock Text="{Binding VirtualMachineCount}" />
+            <TextBlock Grid.Column="2" Text="{Binding StatusMessages[0]}" Style="{StaticResource CaptionStyle}"
+                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="3" Orientation="Horizontal">
+                <ProgressBar IsIndeterminate="True" Width="90" Height="4" Margin="0,0,12,0"
+                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
+                <TextBlock Style="{StaticResource CaptionStyle}">
+                    <Run Text="Letzte Aktualisierung: " />
+                    <Run Text="{Binding LastRefreshedAt, StringFormat='{}{0:HH:mm:ss}'}" />
                 </TextBlock>
-            </StatusBarItem>
-            <Separator />
-            <StatusBarItem>
-                <TextBlock>
-                    <TextBlock Text="Gruppen: " /><TextBlock Text="{Binding GroupCount}" />
-                </TextBlock>
-            </StatusBarItem>
-            <Separator />
-            <StatusBarItem>
-                <TextBlock>
-                    <TextBlock Text="Geplante Änderungen: " /><TextBlock Text="{Binding PendingChangeCount}" />
-                </TextBlock>
-            </StatusBarItem>
-            <Separator />
-            <StatusBarItem>
-                <TextBlock>
-                    <TextBlock Text="Letzte Aktualisierung: " /><TextBlock Text="{Binding LastRefreshedAt, StringFormat='HH:mm:ss'}" />
-                </TextBlock>
-            </StatusBarItem>
-            <StatusBarItem HorizontalAlignment="Right">
-                <TextBlock Text="{Binding StatusMessages[0]}" />
-            </StatusBarItem>
-        </StatusBar>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

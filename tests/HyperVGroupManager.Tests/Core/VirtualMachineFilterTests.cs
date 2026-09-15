@@ -73,4 +73,17 @@ public class VirtualMachineFilterTests
         Assert.Single(result);
         Assert.Equal("DC01", result[0].Name);
     }
+
+    [Theory]
+    [InlineData("host01")]
+    [InlineData("running")]
+    [InlineData("daily")]
+    public void Apply_SearchText_AlsoSearchesOwnerStateAndGroups(string searchText)
+    {
+        var vms = new[] { Vm("VM01", "Running", "VEEAM_Daily") };
+
+        var result = VirtualMachineFilter.Apply(vms, VmFilterMode.All, searchText, null);
+
+        Assert.Single(result);
+    }
 }

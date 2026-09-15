@@ -42,6 +42,21 @@ public class HyperVGroupServiceTests
     }
 
     [Fact]
+    public async Task TestEnvironmentAsync_NonModuleFailure_ThrowsConnectionException()
+    {
+        var executor = new FakePowerShellExecutor();
+        executor.SetResponse("Test-HVGMEnvironment", new PowerShellResult<EnvironmentInfo>
+        {
+            Success = false,
+            Errors = new[] { "The target name is invalid." },
+        });
+        var service = new HyperVGroupService(executor, new FakeLogService());
+
+        await Assert.ThrowsAsync<HyperVConnectionException>(() =>
+            service.TestEnvironmentAsync("bad target", CancellationToken.None));
+    }
+
+    [Fact]
     public async Task GetVirtualMachinesAsync_Failure_ThrowsHyperVConnectionException()
     {
         var executor = new FakePowerShellExecutor();
@@ -160,5 +175,33 @@ public class HyperVGroupServiceTests
         Assert.True(result.Results[0].Success);
         Assert.False(result.Results[1].Success);
         Assert.Equal("VM mit ID '...' wurde nicht gefunden.", result.Results[1].Error);
+    }
+
+    [Fact]
+    public async Task ApplyChangesAsync_MissingPerItemResult_RejectsBackendResponse()
+    {
+        var groupId = Guid.NewGuid();
+        var executor = new FakePowerShellExecutor();
+        executor.SetResponse("Invoke-HVGMChangeSet", new PowerShellResult<IReadOnlyList<ChangeApplicationResult>>
+        {
+            Success = true,
+            Data = Array.Empty<ChangeApplicationResult>(),
+        });
+        var service = new HyperVGroupService(executor, new FakeLogService());
+        var changes = new[]
+        {
+            new VmGroupMembershipChange
+            {
+                ChangeType = VmGroupChangeType.CreateGroup,
+                GroupId = groupId,
+                GroupName = "VEEAM_Test",
+                Description = "Create",
+            },
+        };
+
+        var exception = await Assert.ThrowsAsync<VmGroupOperationException>(() =>
+            service.ApplyChangesAsync("HV01", changes, CancellationToken.None));
+
+        Assert.Contains("Backend-Antwort", exception.Message);
     }
 }

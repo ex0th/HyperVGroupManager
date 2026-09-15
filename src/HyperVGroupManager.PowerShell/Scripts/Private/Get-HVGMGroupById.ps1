@@ -17,6 +17,10 @@
         [string]$GroupName = $null
     )
 
+    if ($GroupId -eq [guid]::Empty) {
+        throw 'The group ID must not be empty.'
+    }
+
     $hostName = Get-HVGMGroupHostName -Target $Target
 
     $group = Get-VMGroup -ComputerName $hostName -Id $GroupId -ErrorAction SilentlyContinue

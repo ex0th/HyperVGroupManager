@@ -26,6 +26,78 @@
     # GUID the C# side generated as a placeholder before the apply run.
     $groupIdMap = @{}
 
+    # Validate the complete payload before the first mutating command runs. Keep string
+    # literals ASCII-only because Windows PowerShell 5.1 may read BOM-less files as ANSI.
+    if ($Changes.Count -eq 0) {
+        return (New-HVGMResult -Success $false -Errors @('The change set is empty.'))
+    }
+    if ($Changes.Count -gt 5000) {
+        return (New-HVGMResult -Success $false -Errors @('The change set exceeds the limit of 5000 entries.'))
+    }
+
+    $executionOrder = @{
+        'CreateGroup'      = 0
+        'RenameGroup'      = 1
+        'AddMembership'    = 2
+        'RemoveMembership' = 3
+        'DeleteGroup'      = 4
+    }
+    $seenOperations = @{}
+    $previousOrder = -1
+    $validationErrors = @()
+
+    for ($index = 0; $index -lt $Changes.Count; $index++) {
+        $change = $Changes[$index]
+        $label = "Change $($index + 1)"
+        if ($null -eq $change) {
+            $validationErrors += "$label is null."
+            continue
+        }
+
+        $changeType = [string]$change.ChangeType
+        if (-not $executionOrder.ContainsKey($changeType)) {
+            $validationErrors += "$label has an unknown change type."
+            continue
+        }
+        if ($executionOrder[$changeType] -lt $previousOrder) {
+            $validationErrors += "$label is not in the required execution order."
+        }
+        $previousOrder = $executionOrder[$changeType]
+
+        $groupId = [guid]::Empty
+        if (-not [guid]::TryParse([string]$change.GroupId, [ref]$groupId) -or $groupId -eq [guid]::Empty) {
+            $validationErrors += "$label has an invalid group ID."
+        }
+
+        $groupName = [string]$change.GroupName
+        if ([string]::IsNullOrWhiteSpace($groupName) -or $groupName.Length -gt 256 -or $groupName -match '[\x00-\x1F\x7F]') {
+            $validationErrors += "$label has an invalid group name."
+        }
+        elseif ($groupName -ne $groupName.Trim()) {
+            $validationErrors += "$label has whitespace around the group name."
+        }
+
+        $vmIdText = [string]$change.VmId
+        if ($changeType -eq 'AddMembership' -or $changeType -eq 'RemoveMembership') {
+            $vmId = [guid]::Empty
+            if (-not [guid]::TryParse($vmIdText, [ref]$vmId) -or $vmId -eq [guid]::Empty) {
+                $validationErrors += "$label has an invalid VM ID."
+            }
+        }
+
+        $operationKey = "$changeType|$vmIdText|$([string]$change.GroupId)"
+        if ($seenOperations.ContainsKey($operationKey)) {
+            $validationErrors += "$label duplicates an earlier operation."
+        }
+        else {
+            $seenOperations[$operationKey] = $true
+        }
+    }
+
+    if ($validationErrors.Count -gt 0) {
+        return (New-HVGMResult -Success $false -Errors $validationErrors)
+    }
+
     foreach ($change in $Changes) {
         if ($stopProcessing) {
             $itemResults += [pscustomobject]@{
@@ -99,13 +171,14 @@
         }
         catch {
             $stopProcessing = $true
+            $safeMessage = ($_.Exception.Message -replace '[\r\n\t]+', ' ').Trim()
             $itemResults += [pscustomobject]@{
                 ChangeType  = $change.ChangeType
                 VmId        = $change.VmId
                 GroupId     = $change.GroupId
                 Description = $change.Description
                 Success     = $false
-                Error       = $_.Exception.Message
+                Error       = $safeMessage
                 Warnings    = @()
             }
         }

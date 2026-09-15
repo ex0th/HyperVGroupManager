@@ -11,14 +11,17 @@ function Send-HVGMUntaggedVMsReport {
         [Parameter(Mandatory)]
         [string]$SmtpHost,
 
+        [ValidateRange(1, 65535)]
         [int]$SmtpPort = 587,
 
         # None | STARTTLS | SSL
+        [ValidateSet('None', 'STARTTLS', 'SSL')]
         [string]$SmtpSecurity = 'STARTTLS',
 
         [bool]$UseAuthentication = $false,
         [string]$Username = '',
         [string]$Password = '',
+        [string]$ProtectedPassword = '',
 
         [Parameter(Mandatory)]
         [string]$SenderAddress,
@@ -32,6 +35,14 @@ function Send-HVGMUntaggedVMsReport {
     )
 
     try {
+        if ($RecipientAddresses.Count -eq 0 -or $RecipientAddresses.Count -gt 100) {
+            throw 'Between 1 and 100 recipient addresses are required.'
+        }
+        if ($UseAuthentication -and ([string]::IsNullOrWhiteSpace($Username) -or
+            ([string]::IsNullOrEmpty($Password) -and [string]::IsNullOrEmpty($ProtectedPassword)))) {
+            throw 'SMTP authentication requires a user name and password.'
+        }
+
         $target = Resolve-HVGMTarget -TargetName $TargetName
 
         $hostName = Get-HVGMGroupHostName -Target $target
@@ -98,7 +109,12 @@ function Send-HVGMUntaggedVMsReport {
         }
 
         if ($UseAuthentication -and -not [string]::IsNullOrWhiteSpace($Username)) {
-            $secPwd    = ConvertTo-SecureString -String $Password -AsPlainText -Force
+            if (-not [string]::IsNullOrEmpty($ProtectedPassword)) {
+                $secPwd = ConvertTo-SecureString -String $ProtectedPassword
+            }
+            else {
+                $secPwd = ConvertTo-SecureString -String $Password -AsPlainText -Force
+            }
             $cred      = New-Object System.Management.Automation.PSCredential($Username, $secPwd)
             $smtpParams['Credential'] = $cred
         }

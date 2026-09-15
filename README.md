@@ -32,12 +32,25 @@ PowerShell-JSON-Vertrag: [docs/powershell-json-contract.md](docs/powershell-json
 * Sie verwaltet ausschließlich Hyper-V-VM-Gruppen (`VMCollectionType`).
 * Kein `Invoke-Expression`, keine String-Verkettung von PowerShell-Code.
 * Parameter werden ausschließlich als JSON-Datei übergeben (nie als Kommandozeilenargument).
-* Passwörter und geheime Daten werden nicht geloggt.
+* Änderungssätze werden vor der Ausführung in C# und nochmals im PowerShell-Modul validiert.
+* Ein Änderungssatz ist fest an das verbundene Ziel gebunden; ein Zielwechsel mit offener Queue
+  wird blockiert.
+* SMTP-Kennwörter werden nicht geloggt und benutzergebunden mit Windows DPAPI verschlüsselt.
+
+## Neu in 0.2
+
+* native Fluent-Oberfläche für WPF mit System-Hell-/Dunkelmodus und Windows-Akzentfarbe
+* Vorschau des erwarteten Zustands inklusive aller noch nicht angewendeten Änderungen
+* neue Gruppen können im selben Änderungslauf bereits VM-Mitglieder erhalten
+* leere Gruppen können nach geplanten Mitgliedschaftsentfernungen sicher gelöscht werden
+* vollständige Preflight-Prüfung, Antwortkorrelation und Sperre bei unklarem Serverzustand
+* gehärteter PowerShell-Bootstrap mit Allow-List sowie Ein-/Ausgabelimits
 
 ## MVP-Umfang
 
 Enthalten: native VM-Gruppen (VMCollectionType) auf Einzelhost und Cluster, Mehrfachmitgliedschaft,
-geplante Änderungen mit Vorschau, JSON-Export, geplanter E-Mail-Bericht über VMs ohne Gruppe.
+geprüfte Änderungen mit effektiver Vorschau, JSON-Export und geplanter E-Mail-Bericht über VMs
+ohne Gruppe.
 
 Nicht enthalten (außerhalb des Scopes): Veeam-API-Anbindung, ManagementCollectionType,
 verschachtelte Gruppen, SCVMM, AD-Anmeldung, Installer, Auto-Update.

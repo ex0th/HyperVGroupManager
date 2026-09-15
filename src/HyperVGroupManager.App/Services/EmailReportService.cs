@@ -1,4 +1,6 @@
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using HyperVGroupManager.Core.Interfaces;
 
@@ -17,6 +19,7 @@ public sealed class EmailReportService
         "HyperVGroupManager");
 
     private static readonly string ConfigFilePath = Path.Combine(ConfigDir, "email-report-config.json");
+    private static readonly byte[] PasswordEntropy = Encoding.UTF8.GetBytes("HyperVGroupManager.EmailReport.v1");
 
     private readonly IPowerShellExecutor _executor;
 
@@ -30,9 +33,22 @@ public sealed class EmailReportService
         try
         {
             var json = File.ReadAllText(ConfigFilePath);
-            return JsonSerializer.Deserialize<EmailReportConfig>(json, JsonOptions) ?? new EmailReportConfig();
+            var config = JsonSerializer.Deserialize<EmailReportConfig>(json, JsonOptions) ?? new EmailReportConfig();
+            config.Password = UnprotectPassword(config.ProtectedPassword);
+
+            // Migration aus Versionen, die das Kennwort als Klartext gespeichert haben.
+            using var document = JsonDocument.Parse(json);
+            if (config.Password.Length == 0 &&
+                document.RootElement.TryGetProperty("Password", out var oldPasswordProperty) &&
+                oldPasswordProperty.ValueKind == JsonValueKind.String)
+            {
+                config.Password = oldPasswordProperty.GetString() ?? string.Empty;
+                SaveConfig(config);
+            }
+
+            return config;
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or CryptographicException or FormatException)
         {
             return new EmailReportConfig();
         }
@@ -40,13 +56,21 @@ public sealed class EmailReportService
 
     public void SaveConfig(EmailReportConfig config)
     {
+        ArgumentNullException.ThrowIfNull(config);
         Directory.CreateDirectory(ConfigDir);
+        config.ProtectedPassword = ProtectPassword(config.Password);
         File.WriteAllText(ConfigFilePath, JsonSerializer.Serialize(config, JsonOptions));
     }
 
     public async Task<(bool Success, string Message)> SendReportNowAsync(
         EmailReportConfig config, CancellationToken cancellationToken)
     {
+        var validation = EmailReportConfigValidator.ValidateForSend(config);
+        if (!validation.IsValid)
+        {
+            return (false, string.Join("\n", validation.Errors));
+        }
+
         var result = await _executor.ExecuteAsync<string>(
             "Send-HVGMUntaggedVMsReport",
             BuildSendParams(config),
@@ -60,6 +84,12 @@ public sealed class EmailReportService
     public async Task<(bool Success, string Message)> RegisterScheduledTaskAsync(
         EmailReportConfig config, CancellationToken cancellationToken)
     {
+        var validation = EmailReportConfigValidator.ValidateForScheduledTask(config);
+        if (!validation.IsValid)
+        {
+            return (false, string.Join("\n", validation.Errors));
+        }
+
         var result = await _executor.ExecuteAsync<string>(
             "Register-HVGMEmailReportTask",
             BuildRegisterParams(config),
@@ -126,6 +156,44 @@ public sealed class EmailReportService
         RecipientAddresses = c.RecipientAddresses,
         BodyPrefix        = c.BodyPrefix,
     };
+
+    internal static string ProtectPassword(string password)
+    {
+        if (string.IsNullOrEmpty(password))
+        {
+            return string.Empty;
+        }
+
+        var clearBytes = Encoding.UTF8.GetBytes(password);
+        try
+        {
+            return Convert.ToBase64String(ProtectedData.Protect(clearBytes, PasswordEntropy, DataProtectionScope.CurrentUser));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(clearBytes);
+        }
+    }
+
+    internal static string UnprotectPassword(string protectedPassword)
+    {
+        if (string.IsNullOrWhiteSpace(protectedPassword))
+        {
+            return string.Empty;
+        }
+
+        var encryptedBytes = Convert.FromBase64String(protectedPassword);
+        var clearBytes = ProtectedData.Unprotect(encryptedBytes, PasswordEntropy, DataProtectionScope.CurrentUser);
+        try
+        {
+            return Encoding.UTF8.GetString(clearBytes);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(clearBytes);
+            CryptographicOperations.ZeroMemory(encryptedBytes);
+        }
+    }
 }
 
 public record EmailTaskStatus

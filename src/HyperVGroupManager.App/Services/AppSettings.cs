@@ -19,6 +19,7 @@ public static class AppSettingsLoader
 
     public static AppSettings Load(string basePath)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(basePath);
         var path = Path.Combine(basePath, "appsettings.json");
 
         if (!File.Exists(path))
@@ -29,11 +30,36 @@ public static class AppSettingsLoader
         try
         {
             var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions) ?? new AppSettings();
+            return Normalize(JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions) ?? new AppSettings());
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
             return new AppSettings();
         }
+    }
+
+    private static AppSettings Normalize(AppSettings settings)
+    {
+        var powerShell = settings.PowerShell ?? new PowerShellOptions();
+        return new AppSettings
+        {
+            PowerShell = new PowerShellOptions
+            {
+                ExecutablePath = string.IsNullOrWhiteSpace(powerShell.ExecutablePath)
+                    ? "powershell.exe"
+                    : powerShell.ExecutablePath.Trim(),
+                ExecutionPolicy = NormalizeExecutionPolicy(powerShell.ExecutionPolicy),
+                TimeoutSeconds = Math.Clamp(powerShell.TimeoutSeconds, 10, 3600),
+            },
+            Application = settings.Application ?? new ApplicationOptions(),
+        };
+    }
+
+    private static string NormalizeExecutionPolicy(string? value)
+    {
+        var policy = string.IsNullOrWhiteSpace(value) ? "Bypass" : value.Trim();
+        return policy is "AllSigned" or "Bypass" or "Default" or "RemoteSigned" or "Restricted" or "Undefined" or "Unrestricted"
+            ? policy
+            : "Bypass";
     }
 }

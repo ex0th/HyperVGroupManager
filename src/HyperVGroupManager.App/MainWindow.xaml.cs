@@ -1,4 +1,5 @@
 using System.Linq;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using HyperVGroupManager.App.Services;
@@ -91,11 +92,23 @@ namespace HyperVGroupManager.App
 
         private void ClusterConfigButton_Click(object sender, RoutedEventArgs e)
         {
-            new ClusterConfigDialog(_hyperVGroupService, _viewModel.TargetName ?? "", _emailReportService) { Owner = this }.ShowDialog();
+            if (!_viewModel.IsConnected)
+            {
+                MessageBox.Show(this, "Bitte zuerst eine Verbindung herstellen.", "Keine Verbindung", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            new ClusterConfigDialog(_hyperVGroupService, _viewModel.ConnectedTargetName, _emailReportService) { Owner = this }.ShowDialog();
         }
 
         private async void ExportConfigurationButton_Click(object sender, RoutedEventArgs e)
         {
+            if (!_viewModel.IsConnected)
+            {
+                MessageBox.Show(this, "Bitte zuerst eine Verbindung herstellen.", "Keine Verbindung", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             var saveFileDialog = new SaveFileDialog
             {
                 Filter = "JSON-Datei (*.json)|*.json",
@@ -106,6 +119,51 @@ namespace HyperVGroupManager.App
             {
                 await _viewModel.ExportConfigurationCommand.ExecuteAsync(saveFileDialog.FileName);
             }
+        }
+
+        private async void ApplyChangesButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_viewModel.ApplyChangesCommand.CanExecute(null))
+            {
+                return;
+            }
+
+            if (_viewModel.ConfirmBeforeApply && _viewModel.PendingChangeCount > 0)
+            {
+                var confirmation = MessageBox.Show(
+                    this,
+                    $"{_viewModel.PendingChangeCount} Änderung(en) werden auf '{_viewModel.ConnectedTargetName}' angewendet.\n\n" +
+                    "Der Änderungssatz wird unmittelbar vorher nochmals vollständig geprüft. Fortfahren?",
+                    "Änderungen anwenden",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+
+                if (confirmation != MessageBoxResult.Yes)
+                {
+                    return;
+                }
+            }
+
+            await _viewModel.ApplyChangesCommand.ExecuteAsync(null);
+        }
+
+        private void MainWindow_Closing(object? sender, CancelEventArgs e)
+        {
+            if (!_viewModel.HasPendingChanges)
+            {
+                return;
+            }
+
+            var result = MessageBox.Show(
+                this,
+                $"Es sind noch {_viewModel.PendingChangeCount} nicht angewendete Änderung(en) vorhanden. Beim Beenden gehen sie verloren.\n\nAnwendung trotzdem schließen?",
+                "Geplante Änderungen verwerfen",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+
+            e.Cancel = result != MessageBoxResult.Yes;
         }
     }
 }

@@ -51,7 +51,7 @@ $OutputEncoding            = [System.Text.Encoding]::UTF8
 | `Remove-HVGMGroup` | - | Gruppe löschen (nur wenn leer) |
 | `Add-HVGMGroupMember` | - | VM zu Gruppe hinzufügen |
 | `Remove-HVGMGroupMember` | - | VM aus Gruppe entfernen |
-| `Invoke-HVGMChangeSet` | `ChangeApplicationResult[]` | Änderungsliste atomar anwenden |
+| `Invoke-HVGMChangeSet` | `ChangeApplicationResult[]` | Änderungsliste sequenziell anwenden; Abbruch beim ersten Fehler |
 | `Export-HVGMConfiguration` | `string` (Pfad) | Konfiguration als JSON exportieren |
 | `Get-HVGMClusterConfig` | `ClusterConfig` | Cluster-Knoteninfo |
 | `Set-HVGMConfigStoreRootPath` | - | Konfigurationspfad setzen |
@@ -144,6 +144,11 @@ $OutputEncoding            = [System.Text.Encoding]::UTF8
   "Warnings": []
 }
 ```
+
+Vor der ersten schreibenden Operation validiert das Modul den gesamten Änderungssatz. Unbekannte
+Typen, leere bzw. ungültige IDs, ungültige Gruppennamen, Duplikate, falsche Reihenfolge und mehr
+als 5.000 Einträge werden abgewiesen, ohne Hyper-V zu verändern. C# prüft zusätzlich, dass Anzahl,
+Reihenfolge, IDs und Gesamtstatus der Einzelergebnisse exakt zur Anfrage passen.
 
 ## Manueller Test
 

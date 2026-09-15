@@ -16,6 +16,25 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$allowedCommands = @(
+    'Test-HVGMEnvironment',
+    'Get-HVGMVirtualMachine',
+    'Get-HVGMGroup',
+    'New-HVGMGroup',
+    'Rename-HVGMGroup',
+    'Remove-HVGMGroup',
+    'Add-HVGMGroupMember',
+    'Remove-HVGMGroupMember',
+    'Invoke-HVGMChangeSet',
+    'Export-HVGMConfiguration',
+    'Get-HVGMClusterConfig',
+    'Set-HVGMConfigStoreRootPath',
+    'Send-HVGMUntaggedVMsReport',
+    'Register-HVGMEmailReportTask',
+    'Unregister-HVGMEmailReportTask',
+    'Get-HVGMEmailReportTaskStatus'
+)
+
 # Warning/Verbose/Debug/Information/Progress der zugrunde liegenden Hyper-V-/Cluster-Cmdlets
 # unterdrücken. Bei -File mit umgeleitetem stdout schreibt PowerShell diese Streams ebenfalls
 # auf stdout, teils asynchron beim Aufräumen von CIM/WMI-Sitzungen (z. B. bei Cluster-Verbindungen)
@@ -34,9 +53,26 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $OutputEncoding            = $utf8NoBom
 
 try {
+    if ($CommandName -notin $allowedCommands) {
+        throw "Command '$CommandName' is not allowed."
+    }
+
+    if (-not (Test-Path -LiteralPath $ModuleManifestPath -PathType Leaf)) {
+        throw "The module manifest was not found."
+    }
+
+    if (-not (Test-Path -LiteralPath $ParametersFilePath -PathType Leaf)) {
+        throw "The parameters file was not found."
+    }
+
+    $parametersFile = Get-Item -LiteralPath $ParametersFilePath
+    if ($parametersFile.Length -gt 10MB) {
+        throw "The parameters file exceeds the 10 MB safety limit."
+    }
+
     Import-Module -Name $ModuleManifestPath -Force
 
-    $parametersJson = Get-Content -Path $ParametersFilePath -Raw -Encoding UTF8
+    $parametersJson = Get-Content -LiteralPath $ParametersFilePath -Raw -Encoding UTF8
     $parametersObject = $parametersJson | ConvertFrom-Json
 
     # PS 5.1 kennt ConvertFrom-Json -AsHashtable nicht; Eigenschaften manuell in eine

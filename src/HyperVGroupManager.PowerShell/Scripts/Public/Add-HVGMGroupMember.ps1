@@ -37,6 +37,7 @@
         New-HVGMResult -Success $true -Data ([pscustomobject]@{ VmId = $vm.Id; GroupId = $group.InstanceId }) -Warnings $warnings
     }
     catch {
-        New-HVGMResult -Success $false -Errors @($_.Exception.Message)
+        $safeMessage = ($_.Exception.Message -replace '[\r\n\t]+', ' ').Trim()
+        New-HVGMResult -Success $false -Errors @($safeMessage)
     }
 }

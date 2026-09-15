@@ -15,6 +15,9 @@ namespace HyperVGroupManager.App.Services;
 /// </summary>
 public sealed class PowerShellExecutor : IPowerShellExecutor
 {
+    private const int MaximumParameterBytes = 10 * 1024 * 1024;
+    private const int MaximumCapturedOutputCharacters = 10 * 1024 * 1024;
+
     // JsonStringEnumConverter, damit z. B. ChangeApplicationResult.ChangeType (von PowerShell
     // als String wie "AddMembership" geliefert) in das C#-Enum deserialisiert werden kann.
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -49,11 +52,13 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
     private readonly ILogService _logService;
     private readonly string _moduleManifestPath;
     private readonly string _bootstrapScriptPath;
+    private readonly int _timeoutSeconds;
 
     public PowerShellExecutor(PowerShellOptions options, ILogService logService)
     {
-        _options = options;
-        _logService = logService;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _logService = logService ?? throw new ArgumentNullException(nameof(logService));
+        _timeoutSeconds = Math.Clamp(options.TimeoutSeconds, 10, 3600);
         _moduleManifestPath = Path.Combine(AppContext.BaseDirectory, "PowerShell", "HyperVGroupManager.psd1");
         _bootstrapScriptPath = Path.Combine(AppContext.BaseDirectory, "PowerShell", "Invoke-HVGMCommand.ps1");
     }
@@ -71,13 +76,33 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
             throw new PowerShellExecutionException($"Unbekannter PowerShell-Befehl '{commandName}'.");
         }
 
+        if (!File.Exists(_moduleManifestPath))
+        {
+            throw new PowerShellExecutionException($"Das PowerShell-Modul wurde nicht gefunden: '{_moduleManifestPath}'.");
+        }
+
+        if (!File.Exists(_bootstrapScriptPath))
+        {
+            throw new PowerShellExecutionException($"Das PowerShell-Startskript wurde nicht gefunden: '{_bootstrapScriptPath}'.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
         var parametersFilePath = Path.Combine(Path.GetTempPath(), $"hvgm-{Guid.NewGuid():N}.json");
         var parametersJson = JsonSerializer.Serialize(parameters ?? new object());
-        await File.WriteAllTextAsync(parametersFilePath, parametersJson, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+        if (Encoding.UTF8.GetByteCount(parametersJson) > MaximumParameterBytes)
+        {
+            throw new PowerShellExecutionException("Die PowerShell-Parameter überschreiten das Sicherheitslimit von 10 MB.");
+        }
 
         try
         {
+            await File.WriteAllTextAsync(parametersFilePath, parametersJson, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
             return await RunProcessAsync(commandName, parametersFilePath, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new PowerShellExecutionException("Die temporäre PowerShell-Parameterdatei konnte nicht sicher verarbeitet werden.", ex);
         }
         finally
         {
@@ -112,7 +137,13 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
                 throw new PowerShellExecutionException($"PowerShell-Befehl '{commandName}' lieferte kein gültiges Ergebnis.");
             }
 
-            return envelope with { RawOutput = rawResult.RawOutput, ExitCode = rawResult.ExitCode };
+            return envelope with
+            {
+                Errors = envelope.Errors ?? Array.Empty<string>(),
+                Warnings = envelope.Warnings ?? Array.Empty<string>(),
+                RawOutput = rawResult.RawOutput,
+                ExitCode = rawResult.ExitCode,
+            };
         }
         catch (JsonException ex)
         {
@@ -152,18 +183,27 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
 
         var stdOutBuilder = new StringBuilder();
         var stdErrBuilder = new StringBuilder();
+        var outputWasTruncated = false;
 
-        process.OutputDataReceived += (_, e) => { if (e.Data is not null) stdOutBuilder.AppendLine(e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) stdErrBuilder.AppendLine(e.Data); };
+        process.OutputDataReceived += (_, e) => AppendLimited(stdOutBuilder, e.Data, ref outputWasTruncated);
+        process.ErrorDataReceived += (_, e) => AppendLimited(stdErrBuilder, e.Data, ref outputWasTruncated);
 
         _logService.LogInformation($"Starte PowerShell-Befehl '{commandName}'.");
 
-        process.Start();
+        try
+        {
+            process.Start();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            throw new PowerShellExecutionException(
+                $"PowerShell konnte nicht gestartet werden ('{_options.ExecutablePath}').", ex);
+        }
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(_timeoutSeconds));
 
         try
         {
@@ -179,9 +219,9 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
                 throw;
             }
 
-            _logService.LogError($"PowerShell-Befehl '{commandName}' hat das Timeout von {_options.TimeoutSeconds}s überschritten.");
+            _logService.LogError($"PowerShell-Befehl '{commandName}' hat das Timeout von {_timeoutSeconds}s überschritten.");
             throw new PowerShellExecutionException(
-                $"Der Vorgang '{commandName}' hat das Zeitlimit von {_options.TimeoutSeconds} Sekunden überschritten und wurde abgebrochen.");
+                $"Der Vorgang '{commandName}' hat das Zeitlimit von {_timeoutSeconds} Sekunden überschritten und wurde abgebrochen.");
         }
 
         // Falls PS trotz -Compress mehrere Zeilen schreibt (z.B. weil eine Fehlermeldung
@@ -204,6 +244,13 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
         stdOut = TrimToJsonEnvelope(stdOut);
 
         var stdErr = stdErrBuilder.ToString().Trim();
+
+        if (outputWasTruncated)
+        {
+            _logService.LogError($"PowerShell-Ausgabe von '{commandName}' überschritt das Sicherheitslimit.");
+            throw new PowerShellExecutionException(
+                $"Die Ausgabe von '{commandName}' überschritt das Sicherheitslimit von 10 MB und wurde verworfen.");
+        }
 
         _logService.LogInformation($"PowerShell-Befehl '{commandName}' beendet mit Exit-Code {process.ExitCode}.");
 
@@ -283,9 +330,25 @@ public sealed class PowerShellExecutor : IPowerShellExecutor
                 File.Delete(path);
             }
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Best effort - temporäre Datei kann ignoriert werden, falls sie noch gesperrt ist.
         }
+    }
+
+    private static void AppendLimited(StringBuilder builder, string? line, ref bool wasTruncated)
+    {
+        if (line is null || wasTruncated)
+        {
+            return;
+        }
+
+        if (builder.Length + line.Length + Environment.NewLine.Length > MaximumCapturedOutputCharacters)
+        {
+            wasTruncated = true;
+            return;
+        }
+
+        builder.AppendLine(line);
     }
 }

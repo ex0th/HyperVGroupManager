@@ -12,6 +12,10 @@
         [guid]$VmId
     )
 
+    if ($VmId -eq [guid]::Empty) {
+        throw 'The VM ID must not be empty.'
+    }
+
     foreach ($node in $Target.Nodes) {
         $vm = Get-VM -ComputerName $node -Id $VmId -ErrorAction SilentlyContinue
         if ($vm) {

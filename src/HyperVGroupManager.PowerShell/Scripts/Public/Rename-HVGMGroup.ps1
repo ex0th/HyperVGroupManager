@@ -18,6 +18,7 @@
     )
 
     try {
+        Assert-HVGMGroupName -GroupName $NewName
         $target = Resolve-HVGMTarget -TargetName $TargetName
         $group = Get-HVGMGroupById -Target $target -GroupId $GroupId
         $hostName = Get-HVGMGroupHostName -Target $target
@@ -34,6 +35,7 @@
         New-HVGMResult -Success $true -Data ([pscustomobject]@{ Id = $GroupId; Name = $NewName })
     }
     catch {
-        New-HVGMResult -Success $false -Errors @($_.Exception.Message)
+        $safeMessage = ($_.Exception.Message -replace '[\r\n\t]+', ' ').Trim()
+        New-HVGMResult -Success $false -Errors @($safeMessage)
     }
 }

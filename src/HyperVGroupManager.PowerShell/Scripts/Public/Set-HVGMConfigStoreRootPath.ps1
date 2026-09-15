@@ -16,7 +16,15 @@
     )
 
     try {
+        if ($Path.Length -gt 1024 -or $Path -match '[\x00-\x1F\x7F]' -or
+            -not [System.IO.Path]::IsPathRooted($Path)) {
+            throw 'ConfigStoreRootPath must be a fully qualified Windows path and at most 1024 characters long.'
+        }
+
         $target   = Resolve-HVGMTarget -TargetName $TargetName
+        if (-not $target.IsCluster) {
+            throw 'ConfigStoreRootPath can only be changed for a failover cluster.'
+        }
         $hostName = Get-HVGMGroupHostName -Target $target
 
         $resource = Get-ClusterResource -Name 'Virtual Machine Cluster WMI' `
@@ -28,6 +36,7 @@
         New-HVGMResult -Success $true -Data ([pscustomobject]@{ Path = $Path })
     }
     catch {
-        New-HVGMResult -Success $false -Errors @($_.Exception.Message)
+        $safeMessage = ($_.Exception.Message -replace '[\r\n\t]+', ' ').Trim()
+        New-HVGMResult -Success $false -Errors @($safeMessage)
     }
 }

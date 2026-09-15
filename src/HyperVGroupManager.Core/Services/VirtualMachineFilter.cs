@@ -36,7 +36,11 @@ public static class VirtualMachineFilter
         if (!string.IsNullOrWhiteSpace(searchText))
         {
             var trimmedSearchText = searchText.Trim();
-            query = query.Where(vm => vm.Name.Contains(trimmedSearchText, StringComparison.OrdinalIgnoreCase));
+            query = query.Where(vm =>
+                vm.Name.Contains(trimmedSearchText, StringComparison.OrdinalIgnoreCase) ||
+                vm.OwnerNode.Contains(trimmedSearchText, StringComparison.OrdinalIgnoreCase) ||
+                vm.State.Contains(trimmedSearchText, StringComparison.OrdinalIgnoreCase) ||
+                vm.GroupNames.Any(groupName => groupName.Contains(trimmedSearchText, StringComparison.OrdinalIgnoreCase)));
         }
 
         return query;

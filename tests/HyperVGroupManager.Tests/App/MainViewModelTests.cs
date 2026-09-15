@@ -97,14 +97,20 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public void AddThenRemoveSelectedVmsFromSameGroup_CancelOutInPendingChanges()
+    public async Task AddThenRemoveSelectedVmsFromSameGroup_CancelOutInPendingChanges()
     {
-        var viewModel = CreateViewModel(new FakeHyperVGroupService());
         var vm = new VirtualMachineInfo { Id = Guid.NewGuid(), Name = "VM1", ComputerName = "HOST01", OwnerNode = "HOST01", State = "Running" };
         var group = new VmGroupInfo { Id = Guid.NewGuid(), Name = "VEEAM_Backup_Daily", GroupType = "VMCollectionType" };
+        var service = new FakeHyperVGroupService
+        {
+            VirtualMachines = new List<VirtualMachineInfo> { vm },
+            Groups = new List<VmGroupInfo> { group },
+        };
+        var viewModel = CreateViewModel(service);
+        viewModel.TargetName = "HV01";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
 
-        viewModel.Groups.Add(group);
-        viewModel.SelectedGroup = group;
+        viewModel.SelectedGroup = viewModel.Groups[0];
         viewModel.SelectedVirtualMachines.Add(vm);
 
         viewModel.AddSelectedVmsToGroupCommand.Execute(null);
@@ -121,6 +127,8 @@ public class MainViewModelTests
         var viewModel = CreateViewModel(service);
         viewModel.TargetName = "HV01";
 
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+
         viewModel.CreateGroupCommand.Execute("VEEAM_Backup_Daily");
 
         await viewModel.ApplyChangesCommand.ExecuteAsync(null);
@@ -136,6 +144,8 @@ public class MainViewModelTests
         var service = new FakeHyperVGroupService();
         var viewModel = CreateViewModel(service);
         viewModel.TargetName = "HV01";
+
+        await viewModel.ConnectCommand.ExecuteAsync(null);
 
         viewModel.CreateGroupCommand.Execute("VEEAM_A");
         viewModel.CreateGroupCommand.Execute("VEEAM_B");
@@ -184,5 +194,147 @@ public class MainViewModelTests
 
         Assert.Empty(viewModel.Groups);
         Assert.Empty(viewModel.PendingChanges);
+    }
+
+    [Fact]
+    public async Task RefreshCommand_WithPendingChanges_PreservesEffectiveState()
+    {
+        var service = new FakeHyperVGroupService();
+        var viewModel = CreateViewModel(service);
+        viewModel.TargetName = "HV01";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+        viewModel.CreateGroupCommand.Execute("VEEAM_New");
+
+        await viewModel.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Single(viewModel.PendingChanges);
+        Assert.Equal("VEEAM_New", Assert.Single(viewModel.Groups).Name);
+    }
+
+    [Fact]
+    public async Task AddMembership_ToPendingNewGroup_IsPlannedInSameChangeSet()
+    {
+        var vm = new VirtualMachineInfo
+        {
+            Id = Guid.NewGuid(), Name = "VM01", ComputerName = "HV01", OwnerNode = "HV01", State = "Running",
+        };
+        var service = new FakeHyperVGroupService { VirtualMachines = new List<VirtualMachineInfo> { vm } };
+        var viewModel = CreateViewModel(service);
+        viewModel.TargetName = "HV01";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+
+        viewModel.CreateGroupCommand.Execute("VEEAM_New");
+        viewModel.SelectedVirtualMachines.Add(vm);
+        viewModel.AddSelectedVmsToGroupCommand.Execute(null);
+
+        Assert.Equal(2, viewModel.PendingChanges.Count);
+        Assert.Equal(1, Assert.Single(viewModel.Groups).MemberCount);
+        Assert.Equal("VEEAM_New", Assert.Single(viewModel.VirtualMachines).GroupNames.Single());
+    }
+
+    [Fact]
+    public async Task DeletePendingNewGroup_WithPlannedMember_CancelsAllDependentChanges()
+    {
+        var vm = new VirtualMachineInfo
+        {
+            Id = Guid.NewGuid(), Name = "VM01", ComputerName = "HV01", OwnerNode = "HV01", State = "Running",
+        };
+        var service = new FakeHyperVGroupService { VirtualMachines = new List<VirtualMachineInfo> { vm } };
+        var viewModel = CreateViewModel(service);
+        viewModel.TargetName = "HV01";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+        viewModel.CreateGroupCommand.Execute("VEEAM_Temporary");
+        viewModel.SelectedVirtualMachines.Add(vm);
+        viewModel.AddSelectedVmsToGroupCommand.Execute(null);
+
+        viewModel.DeleteGroupCommand.Execute(null);
+
+        Assert.Empty(viewModel.PendingChanges);
+        Assert.Empty(viewModel.Groups);
+        Assert.Empty(Assert.Single(viewModel.VirtualMachines).GroupNames);
+    }
+
+    [Fact]
+    public async Task ConnectCommand_DifferentTargetWithPendingChanges_IsBlocked()
+    {
+        var service = new FakeHyperVGroupService();
+        var viewModel = CreateViewModel(service);
+        viewModel.TargetName = "HV01";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+        viewModel.CreateGroupCommand.Execute("VEEAM_New");
+
+        viewModel.TargetName = "HV02";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, service.TestEnvironmentCallCount);
+        Assert.Equal("HV01", viewModel.ConnectedTargetName);
+        Assert.Single(viewModel.PendingChanges);
+    }
+
+    [Fact]
+    public async Task ApplyChanges_UsesConnectedTargetEvenIfInputWasEdited()
+    {
+        var service = new FakeHyperVGroupService();
+        var viewModel = CreateViewModel(service);
+        viewModel.TargetName = "HV01";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+        viewModel.CreateGroupCommand.Execute("VEEAM_New");
+        viewModel.TargetName = "HV02";
+
+        await viewModel.ApplyChangesCommand.ExecuteAsync(null);
+
+        Assert.Equal("HV01", service.LastAppliedTargetName);
+    }
+
+    [Fact]
+    public async Task ApplyChanges_TransportFailure_MarksStateUncertainAndBlocksRetry()
+    {
+        var service = new FakeHyperVGroupService
+        {
+            ExceptionOnApplyChanges = new PowerShellExecutionException("Verbindung abgebrochen."),
+        };
+        var viewModel = CreateViewModel(service);
+        viewModel.TargetName = "HV01";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+        viewModel.CreateGroupCommand.Execute("VEEAM_New");
+
+        await viewModel.ApplyChangesCommand.ExecuteAsync(null);
+        await viewModel.ApplyChangesCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsStateUncertain);
+        Assert.Equal(1, service.ApplyChangesCallCount);
+        Assert.Single(viewModel.PendingChanges);
+    }
+
+    [Fact]
+    public async Task RemoveLastMemberThenDelete_IsAcceptedUsingEffectiveMemberCount()
+    {
+        var vm = new VirtualMachineInfo
+        {
+            Id = Guid.NewGuid(), Name = "VM01", ComputerName = "HV01", OwnerNode = "HV01", State = "Off",
+            GroupNames = new[] { "VEEAM_Old" },
+        };
+        var group = new VmGroupInfo
+        {
+            Id = Guid.NewGuid(), Name = "VEEAM_Old", GroupType = "VMCollectionType", MemberCount = 1,
+            MemberVmIds = new[] { vm.Id }, MemberVmNames = new[] { vm.Name },
+        };
+        var service = new FakeHyperVGroupService
+        {
+            VirtualMachines = new List<VirtualMachineInfo> { vm }, Groups = new List<VmGroupInfo> { group },
+        };
+        var viewModel = CreateViewModel(service);
+        viewModel.TargetName = "HV01";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+        viewModel.SelectedGroup = viewModel.Groups[0];
+        viewModel.SelectedVirtualMachines.Add(viewModel.VirtualMachines[0]);
+
+        viewModel.RemoveSelectedVmsFromGroupCommand.Execute(null);
+        Assert.Equal(0, viewModel.SelectedGroup!.MemberCount);
+        viewModel.DeleteGroupCommand.Execute(null);
+
+        Assert.Empty(viewModel.Groups);
+        Assert.Contains(viewModel.PendingChanges, change => change.ChangeType == VmGroupChangeType.RemoveMembership);
+        Assert.Contains(viewModel.PendingChanges, change => change.ChangeType == VmGroupChangeType.DeleteGroup);
     }
 }

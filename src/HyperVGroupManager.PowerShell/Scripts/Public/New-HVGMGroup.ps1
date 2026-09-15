@@ -15,6 +15,7 @@
     )
 
     try {
+        Assert-HVGMGroupName -GroupName $GroupName
         $target = Resolve-HVGMTarget -TargetName $TargetName
         $hostName = Get-HVGMGroupHostName -Target $target
 
@@ -42,6 +43,7 @@
         })
     }
     catch {
-        New-HVGMResult -Success $false -Errors @($_.Exception.Message)
+        $safeMessage = ($_.Exception.Message -replace '[\r\n\t]+', ' ').Trim()
+        New-HVGMResult -Success $false -Errors @($safeMessage)
     }
 }

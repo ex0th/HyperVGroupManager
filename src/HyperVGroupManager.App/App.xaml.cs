@@ -35,10 +35,7 @@ namespace HyperVGroupManager.App
             var logService = _serviceProvider?.GetService<ILogService>();
             var msg = $"Unbehandelter UI-Fehler: {e.Exception}";
             logService?.LogError(msg);
-            System.IO.File.AppendAllText(
-                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "HyperVGroupManager", "crash.log"),
-                $"{DateTime.Now:O} {msg}{Environment.NewLine}");
+            TryWriteCrashLog(msg);
             e.Handled = true;
             MessageBox.Show(e.Exception.ToString(), "Unbehandelter Fehler", MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -46,10 +43,25 @@ namespace HyperVGroupManager.App
         private void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
             var msg = $"Fataler Fehler: {e.ExceptionObject}";
-            System.IO.File.AppendAllText(
-                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "HyperVGroupManager", "crash.log"),
-                $"{DateTime.Now:O} {msg}{Environment.NewLine}");
+            TryWriteCrashLog(msg);
+        }
+
+        private static void TryWriteCrashLog(string message)
+        {
+            try
+            {
+                var directory = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "HyperVGroupManager");
+                System.IO.Directory.CreateDirectory(directory);
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(directory, "crash.log"),
+                    $"{DateTime.Now:O} {message}{Environment.NewLine}");
+            }
+            catch
+            {
+                // Ein Fehler im Crash-Logger darf den ursprünglichen Fehler nicht verdecken.
+            }
         }
 
         protected override void OnExit(ExitEventArgs e)

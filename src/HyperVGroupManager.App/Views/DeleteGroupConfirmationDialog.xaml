@@ -13,7 +13,7 @@
             <TextBlock TextWrapping="Wrap">
                 <TextBlock Text="Soll die Gruppe '" /><TextBlock x:Name="ConfirmGroupNameText" FontWeight="Bold" /><TextBlock Text="' wirklich gelöscht werden?" />
             </TextBlock>
-            <TextBlock Text="Diese Gruppe ist leer (0 Mitglieder)." Margin="0,10,0,0" Foreground="Gray" />
+            <TextBlock Text="Diese Gruppe ist im erwarteten Zustand leer (0 Mitglieder)." Margin="0,10,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
         </StackPanel>
 
         <StackPanel x:Name="BlockedPanel" Grid.Row="0" Visibility="Collapsed">

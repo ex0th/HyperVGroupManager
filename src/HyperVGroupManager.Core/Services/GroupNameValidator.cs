@@ -16,14 +16,28 @@ public sealed record GroupNameValidationResult
 /// </summary>
 public static class GroupNameValidator
 {
+    public const int MaxLength = 256;
+
     public static GroupNameValidationResult Validate(string? name, IEnumerable<string> existingGroupNames)
     {
+        ArgumentNullException.ThrowIfNull(existingGroupNames);
+
         if (string.IsNullOrWhiteSpace(name))
         {
             return GroupNameValidationResult.Invalid("Der Gruppenname darf nicht leer sein.");
         }
 
         var trimmedName = name.Trim();
+
+        if (trimmedName.Length > MaxLength)
+        {
+            return GroupNameValidationResult.Invalid($"Der Gruppenname darf höchstens {MaxLength} Zeichen lang sein.");
+        }
+
+        if (trimmedName.Any(char.IsControl))
+        {
+            return GroupNameValidationResult.Invalid("Der Gruppenname darf keine Steuerzeichen enthalten.");
+        }
 
         var isDuplicate = existingGroupNames.Any(existing =>
             string.Equals(existing, trimmedName, StringComparison.OrdinalIgnoreCase));

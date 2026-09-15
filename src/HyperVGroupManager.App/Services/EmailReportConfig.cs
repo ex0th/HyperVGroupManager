@@ -1,5 +1,7 @@
 namespace HyperVGroupManager.App.Services;
 
+using System.Text.Json.Serialization;
+
 public class EmailReportConfig
 {
     // SMTP
@@ -10,7 +12,11 @@ public class EmailReportConfig
     public string SmtpSecurity { get; set; } = "STARTTLS";
     public bool UseAuthentication { get; set; } = false;
     public string Username { get; set; } = "";
+    // Nur zur Laufzeit im Speicher. Persistiert wird ausschließlich die per Windows
+    // DPAPI an das aktuelle Benutzerkonto gebundene Variante.
+    [JsonIgnore]
     public string Password { get; set; } = "";
+    public string ProtectedPassword { get; set; } = "";
 
     // E-Mail-Inhalt
     public string SenderAddress { get; set; } = "";

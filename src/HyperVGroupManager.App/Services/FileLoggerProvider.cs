@@ -9,17 +9,25 @@ namespace HyperVGroupManager.App.Services;
 /// </summary>
 public sealed class FileLoggerProvider : ILoggerProvider
 {
-    private readonly string _logDirectory;
+    private readonly string? _logDirectory;
     private readonly object _writeLock = new();
+    private bool _isDisabled;
 
     public FileLoggerProvider()
     {
-        _logDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HyperVGroupManager",
-            "Logs");
-
-        Directory.CreateDirectory(_logDirectory);
+        try
+        {
+            _logDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "HyperVGroupManager",
+                "Logs");
+            Directory.CreateDirectory(_logDirectory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logDirectory = null;
+            _isDisabled = true;
+        }
     }
 
     public ILogger CreateLogger(string categoryName) => new FileLogger(categoryName, this);
@@ -30,11 +38,23 @@ public sealed class FileLoggerProvider : ILoggerProvider
 
     internal void WriteLine(string line)
     {
+        if (_isDisabled || _logDirectory is null)
+        {
+            return;
+        }
+
         var filePath = Path.Combine(_logDirectory, $"HyperVGroupManager-{DateTime.Now:yyyy-MM-dd}.log");
 
         lock (_writeLock)
         {
-            File.AppendAllText(filePath, line + Environment.NewLine, Encoding.UTF8);
+            try
+            {
+                File.AppendAllText(filePath, line + Environment.NewLine, Encoding.UTF8);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _isDisabled = true;
+            }
         }
     }
 

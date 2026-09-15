@@ -18,7 +18,9 @@ function Register-HVGMEmailReportTask {
         # E-Mail / SMTP-Parameter, die in der persistenten Params-Datei abgelegt werden
         [string]$TargetName        = '',
         [string]$SmtpHost          = '',
+        [ValidateRange(1, 65535)]
         [int]   $SmtpPort          = 587,
+        [ValidateSet('None', 'STARTTLS', 'SSL')]
         [string]$SmtpSecurity      = 'STARTTLS',
         [bool]  $UseAuthentication = $false,
         [string]$Username          = '',
@@ -30,6 +32,32 @@ function Register-HVGMEmailReportTask {
     )
 
     try {
+        $bootstrapScript = Join-Path $AppDir 'PowerShell\Invoke-HVGMCommand.ps1'
+        $moduleManifest  = Join-Path $AppDir 'PowerShell\HyperVGroupManager.psd1'
+        if (-not (Test-Path -LiteralPath $bootstrapScript -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $moduleManifest -PathType Leaf)) {
+            throw 'The application PowerShell files were not found. The scheduled task was not changed.'
+        }
+
+        $triggerClock = [datetime]::MinValue
+        $validTime = [datetime]::TryParseExact(
+            $TriggerTime,
+            'HH:mm',
+            [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::None,
+            [ref]$triggerClock)
+        if (-not $validTime) {
+            throw 'TriggerTime must be a valid time in HH:mm format.'
+        }
+
+        $protectedPassword = ''
+        if (-not [string]::IsNullOrEmpty($Password)) {
+            # ConvertFrom-SecureString uses Windows DPAPI when no key is supplied. The
+            # scheduled task therefore has to run as the same Windows user.
+            $protectedPassword = ConvertTo-SecureString -String $Password -AsPlainText -Force |
+                ConvertFrom-SecureString
+        }
+
         # 1. Persistente Params-Datei schreiben
         $configDir  = Join-Path $env:LOCALAPPDATA 'HyperVGroupManager'
         $null       = New-Item -ItemType Directory -Path $configDir -Force
@@ -42,7 +70,7 @@ function Register-HVGMEmailReportTask {
             SmtpSecurity       = $SmtpSecurity
             UseAuthentication  = $UseAuthentication
             Username           = $Username
-            Password           = $Password
+            ProtectedPassword  = $protectedPassword
             SenderAddress      = $SenderAddress
             SenderDisplayName  = $SenderDisplayName
             RecipientAddresses = @($RecipientAddresses | ForEach-Object { $_.ToString() })
@@ -50,9 +78,6 @@ function Register-HVGMEmailReportTask {
         } | ConvertTo-Json -Depth 5 | Set-Content -Path $paramsFile -Encoding UTF8
 
         # 2. Pfade für die Task-Aktion
-        $bootstrapScript = Join-Path $AppDir 'PowerShell\Invoke-HVGMCommand.ps1'
-        $moduleManifest  = Join-Path $AppDir 'PowerShell\HyperVGroupManager.psd1'
-
         $arguments = "-ExecutionPolicy Bypass -NonInteractive -NoProfile " +
                      "-File `"$bootstrapScript`" " +
                      "-ModuleManifestPath `"$moduleManifest`" " +
@@ -62,10 +87,7 @@ function Register-HVGMEmailReportTask {
         $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
 
         # 3. Trigger (täglich zur gewünschten Uhrzeit)
-        $timeParts      = $TriggerTime -split ':'
-        $hour           = [int]$timeParts[0]
-        $minute         = if ($timeParts.Count -gt 1) { [int]$timeParts[1] } else { 0 }
-        $triggerAt      = (Get-Date).Date.AddHours($hour).AddMinutes($minute)
+        $triggerAt      = (Get-Date).Date.AddHours($triggerClock.Hour).AddMinutes($triggerClock.Minute)
         $trigger        = New-ScheduledTaskTrigger -Daily -At $triggerAt
 
         $settings = New-ScheduledTaskSettingsSet `
@@ -84,6 +106,7 @@ function Register-HVGMEmailReportTask {
         New-HVGMResult -Success $true -Data "Aufgabe '$TaskName' erfolgreich registriert (täglich um $TriggerTime Uhr)."
     }
     catch {
-        New-HVGMResult -Success $false -Errors @($_.Exception.Message)
+        $safeMessage = ($_.Exception.Message -replace '[\r\n\t]+', ' ').Trim()
+        New-HVGMResult -Success $false -Errors @($safeMessage)
     }
 }

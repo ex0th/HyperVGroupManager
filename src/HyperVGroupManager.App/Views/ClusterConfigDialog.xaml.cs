@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Media;
@@ -13,6 +14,7 @@ public partial class ClusterConfigDialog : Window
     private readonly IHyperVGroupService _service;
     private readonly string _targetName;
     private bool _isCluster;
+    private string? _currentConfigStoreRootPath;
 
     // ── Email tabs
     private readonly EmailReportService _emailService;
@@ -38,7 +40,7 @@ public partial class ClusterConfigDialog : Window
         if (string.IsNullOrWhiteSpace(_targetName))
         {
             CurrentPathTextBlock.Text = "(kein Host verbunden)";
-            CurrentPathTextBlock.Foreground = Brushes.Gray;
+            CurrentPathTextBlock.Foreground = SystemColors.GrayTextBrush;
             SetInfoBox(false, "Bitte zuerst einen Host/Cluster in der Hauptansicht verbinden, um die Cluster-Einstellungen zu laden.");
             OkButton.IsEnabled = false;
             return;
@@ -61,12 +63,13 @@ public partial class ClusterConfigDialog : Window
     private void ApplyClusterConfig(ClusterConfigInfo config)
     {
         _isCluster = config.IsCluster;
+        _currentConfigStoreRootPath = config.ConfigStoreRootPath;
         CurrentPathTextBlock.Text = !string.IsNullOrEmpty(config.ConfigStoreRootPath)
             ? config.ConfigStoreRootPath
             : "(nicht gesetzt)";
         CurrentPathTextBlock.Foreground = !string.IsNullOrEmpty(config.ConfigStoreRootPath)
-            ? Brushes.Black
-            : Brushes.Gray;
+            ? SystemColors.WindowTextBrush
+            : SystemColors.GrayTextBrush;
 
         if (config.IsCluster)
         {
@@ -113,12 +116,35 @@ public partial class ClusterConfigDialog : Window
             return;
         }
 
+        if (newPath.Length > 1024 || newPath.Any(char.IsControl) || !System.IO.Path.IsPathFullyQualified(newPath))
+        {
+            MessageBox.Show(this, "Bitte einen vollständig qualifizierten Windows-Pfad angeben, z. B. C:\\ClusterStorage\\Volume1\\Hyper-V.",
+                "Ungültiger Pfad", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (string.Equals(newPath.TrimEnd('\\'), _currentConfigStoreRootPath?.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+        {
+            MessageBox.Show(this, "Der angegebene Pfad ist bereits konfiguriert.", "Keine Änderung",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var confirmation = MessageBox.Show(this,
+            $"ConfigStoreRootPath auf '{_targetName}' wirklich ändern?\n\nNeuer Pfad:\n{newPath}\n\nDiese Änderung betrifft den gesamten Cluster.",
+            "Clusterweite Änderung bestätigen", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
         OkButton.IsEnabled = false;
         try
         {
             await _service.SetConfigStoreRootPathAsync(_targetName, newPath, CancellationToken.None);
+            _currentConfigStoreRootPath = newPath;
             CurrentPathTextBlock.Text = newPath;
-            CurrentPathTextBlock.Foreground = Brushes.Black;
+            CurrentPathTextBlock.Foreground = SystemColors.WindowTextBrush;
             MessageBox.Show(this, $"ConfigStoreRootPath wurde erfolgreich auf\n\n{newPath}\n\ngesetzt.", "Erfolg", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
@@ -205,9 +231,17 @@ public partial class ClusterConfigDialog : Window
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
-        _emailService.SaveConfig(ReadControls());
-        MessageBox.Show(this, "Einstellungen wurden gespeichert.", "Gespeichert",
-            MessageBoxButton.OK, MessageBoxImage.Information);
+        try
+        {
+            _emailService.SaveConfig(ReadControls());
+            MessageBox.Show(this, "Einstellungen wurden gespeichert. Das SMTP-Kennwort ist benutzergebunden verschlüsselt.", "Gespeichert",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+        {
+            MessageBox.Show(this, $"Die Einstellungen konnten nicht sicher gespeichert werden:\n\n{ex.Message}", "Fehler",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private async void SendNowButton_Click(object sender, RoutedEventArgs e)
@@ -246,6 +280,11 @@ public partial class ClusterConfigDialog : Window
             MessageBox.Show(this, message, success ? "Erfolg" : "Fehler", MessageBoxButton.OK,
                 success ? MessageBoxImage.Information : MessageBoxImage.Error);
         }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Der Versand ist fehlgeschlagen:\n\n{ex.Message}", "Fehler",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
         finally { SetBusy(false); }
     }
 
@@ -274,6 +313,11 @@ public partial class ClusterConfigDialog : Window
                 success ? MessageBoxImage.Information : MessageBoxImage.Error);
             if (success) await RefreshTaskStatusAsync(config.TaskName);
         }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Die Aufgabe konnte nicht registriert werden:\n\n{ex.Message}", "Fehler",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
         finally { SetBusy(false); }
     }
 
@@ -287,6 +331,11 @@ public partial class ClusterConfigDialog : Window
             MessageBox.Show(this, message, success ? "Aufgabe entfernt" : "Fehler", MessageBoxButton.OK,
                 success ? MessageBoxImage.Information : MessageBoxImage.Error);
             if (success) await RefreshTaskStatusAsync(config.TaskName);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Die Aufgabe konnte nicht entfernt werden:\n\n{ex.Message}", "Fehler",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { SetBusy(false); }
     }

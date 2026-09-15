@@ -129,4 +129,54 @@ public class VmGroupChangeQueueTests
         Assert.Equal(VmGroupChangeType.RemoveMembership, ordered[2].ChangeType);
         Assert.Equal(VmGroupChangeType.DeleteGroup, ordered[3].ChangeType);
     }
+
+    [Fact]
+    public void Add_RenameSameGroupTwice_KeepsLatestName()
+    {
+        var queue = new VmGroupChangeQueue();
+        var groupId = Guid.NewGuid();
+
+        queue.Add(new VmGroupMembershipChange
+        {
+            ChangeType = VmGroupChangeType.RenameGroup,
+            GroupId = groupId,
+            GroupName = "First",
+            Description = "First rename",
+        });
+        var result = queue.Add(new VmGroupMembershipChange
+        {
+            ChangeType = VmGroupChangeType.RenameGroup,
+            GroupId = groupId,
+            GroupName = "Final",
+            Description = "Final rename",
+        });
+
+        Assert.Equal(ChangeQueueAddResult.Updated, result);
+        Assert.Equal("Final", Assert.Single(queue.Changes).GroupName);
+    }
+
+    [Fact]
+    public void Add_CreateWithMembershipThenDelete_RemovesAllDependentChanges()
+    {
+        var queue = new VmGroupChangeQueue();
+        var groupId = Guid.NewGuid();
+        queue.Add(new VmGroupMembershipChange
+        {
+            ChangeType = VmGroupChangeType.CreateGroup,
+            GroupId = groupId,
+            GroupName = "Temporary",
+            Description = "Create",
+        });
+        queue.Add(AddMembership(Guid.NewGuid(), groupId));
+
+        queue.Add(new VmGroupMembershipChange
+        {
+            ChangeType = VmGroupChangeType.DeleteGroup,
+            GroupId = groupId,
+            GroupName = "Temporary",
+            Description = "Delete",
+        });
+
+        Assert.Empty(queue.Changes);
+    }
 }

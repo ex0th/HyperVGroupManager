@@ -31,8 +31,9 @@ Views (XAML)  ->  ViewModels  ->  IHyperVGroupService (Core.Interfaces)
                        externer powershell.exe-Prozess + HyperVGroupManager-Modul
 ```
 
-* **Core** kennt weder WPF noch PowerShell. Es enthält nur Models, Interfaces, `PowerShellResult<T>`,
-  Exceptions sowie reine, testbare Logik (`VmGroupChangeQueue`, `GroupNameValidator`, `VmGroupRules`,
+* **Core** kennt weder WPF noch PowerShell. Es enthält Models, Interfaces, Ergebnisse, Exceptions
+  sowie reine, testbare Logik (`VmGroupChangeQueue`, `ChangeSetValidator`,
+  `EffectiveConfigurationBuilder`, `GroupNameValidator`, `VmGroupRules`,
   `VirtualMachineFilter`, `ConfigurationExportBuilder`).
 * **App** implementiert die Interfaces aus Core (`HyperVGroupService`, `PowerShellExecutor`,
   `LogService`) und enthält die WPF-spezifischen Teile (Views, ViewModels, Converters).
@@ -54,6 +55,8 @@ Views (XAML)  ->  ViewModels  ->  IHyperVGroupService (Core.Interfaces)
    PowerShell-Eigenschaften). Es werden niemals rohe PowerShell-/CIM-Objekte verarbeitet.
 5. Ein Timeout (`appsettings.json: PowerShell.TimeoutSeconds`, Standard 120s) beendet den Prozess
    bei Überschreitung und löst eine `PowerShellExecutionException` aus.
+6. Parameter und erfasste Prozessausgabe sind jeweils auf 10 MB begrenzt. Das PowerShell-Modul
+   akzeptiert maximal 5.000 Änderungen pro Lauf.
 
 ### Multiline-Stdout-Schutz in PowerShellExecutor
 
@@ -85,8 +88,23 @@ logService.LogError($"Ungültiges JSON von PowerShell-Befehl '{commandName}'. Ra
 * identische Änderungen werden nicht doppelt aufgenommen,
 * Add/Remove derselben VM-Gruppe-Kombination heben sich gegenseitig auf,
 * CreateGroup/DeleteGroup derselben (noch nicht angewendeten) Gruppe heben sich auf,
+* ein erneutes Rename derselben Gruppe ersetzt das vorherige Rename,
+* beim Verwerfen einer neuen Gruppe werden alle von ihrer Platzhalter-ID abhängigen Änderungen
+  entfernt,
 * `GetInExecutionOrder()` liefert die Reihenfolge: CreateGroup -> RenameGroup -> AddMembership ->
   RemoveMembership -> DeleteGroup.
+
+`EffectiveConfigurationBuilder` berechnet nach jeder Queue-Änderung einen unveränderlichen
+erwarteten Zustand aus Server-Snapshot plus Queue. Deshalb zeigen Mitgliederzahlen, VM-Filter und
+Export bereits das Resultat der geplanten Änderungen. Eine neue Gruppe kann zusammen mit ihren
+Mitgliedschaften in einem Lauf angewendet werden; das PowerShell-Backend ersetzt ihre temporäre
+ID innerhalb des Laufs durch die von Hyper-V vergebene ID.
+
+Vor dem Schreiben simuliert `ChangeSetValidator` den vollständigen Lauf. Geprüft werden unter
+anderem IDs, Namen, Duplikate, referenzierte VMs/Gruppen, Namenskollisionen und das Löschen nicht
+leerer Gruppen. Danach prüft `HyperVGroupService`, ob jedes Backend-Ergebnis exakt zur gesendeten
+Änderung gehört. Bei Timeout oder Transportfehler wird der Zustand als unklar markiert und ein
+erneuter Schreibversuch bis zum nächsten erfolgreichen Refresh blockiert.
 
 `MainViewModel` ist die einzige Stelle, die die Queue befüllt; angewendet wird sie ausschließlich
 über `IHyperVGroupService.ApplyChangesAsync`, welches intern `Invoke-HVGMChangeSet` aufruft.
@@ -98,15 +116,20 @@ erfolgreich angewendeten Änderungen aus der Queue; fehlgeschlagene bzw. wegen e
 Fehlers nicht ausgeführte Änderungen bleiben für einen erneuten Anwenden-Versuch erhalten. Der
 Ergebnis-Dialog zeigt das Resultat jeder einzelnen Änderung an.
 
-## Bekannte MVP-Einschränkungen
+## Verbleibende Grenzen
 
-* **Neu erstellte, noch nicht angewendete Gruppen** erhalten lokal eine temporäre Guid (der Server
-  vergibt beim tatsächlichen `New-VMGroup` eine eigene Id). Deshalb können einer solchen Gruppe
-  erst nach dem Anwenden Mitglieder hinzugefügt werden - die UI verhindert das mit einer
-  verständlichen Meldung. Umbenennen/Löschen einer noch nicht angewendeten Gruppe wird lokal in
-  die geplante `CreateGroup`-Änderung übernommen bzw. hebt sie über die Queue-Regeln auf.
-* Die Prüfung "Gruppe leer?" vor dem Löschen verwendet den zuletzt geladenen `MemberCount`, nicht
-  bereits geplante (aber noch nicht angewendete) Remove-Änderungen.
+* Der Änderungssatz ist bewusst **nicht transaktional**: Bereits erfolgreiche Hyper-V-Operationen
+  können bei einem späteren Fehler nicht zuverlässig zurückgerollt werden. Das Backend stoppt beim
+  ersten Fehler und meldet jedes Einzelergebnis; die UI lädt danach den tatsächlichen Zustand neu.
+* Ohne echten Hyper-V-Testhost prüfen die automatisierten Tests nur Core-, ViewModel- und
+  JSON-Vertragslogik. Für Releases bleibt der manuelle Smoke-Test auf einem Host bzw. Cluster nötig.
+
+## Schutz von SMTP-Zugangsdaten
+
+Die lokale E-Mail-Konfiguration und die Parameterdatei einer geplanten Aufgabe enthalten kein
+Klartextkennwort. Beide verwenden Windows DPAPI im Kontext des aktuellen Benutzers. Eine alte
+Klartextkonfiguration wird beim nächsten Laden automatisch migriert. Daraus folgt bewusst: Die
+geplante Aufgabe muss unter demselben Windows-Benutzerkonto laufen.
 
 ## PowerShell-5.1-Fallstricke
 

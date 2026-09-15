@@ -17,9 +17,13 @@ public sealed class FakeHyperVGroupService : IHyperVGroupService
     public ApplyChangesResult? ApplyChangesResultToReturn { get; set; }
 
     public IReadOnlyList<VmGroupMembershipChange>? LastAppliedChanges { get; private set; }
+    public string? LastAppliedTargetName { get; private set; }
+    public int TestEnvironmentCallCount { get; private set; }
+    public int ApplyChangesCallCount { get; private set; }
 
     public Task<EnvironmentInfo> TestEnvironmentAsync(string targetName, CancellationToken cancellationToken)
     {
+        TestEnvironmentCallCount++;
         if (ExceptionOnTestEnvironment is not null)
         {
             throw ExceptionOnTestEnvironment;
@@ -49,8 +53,18 @@ public sealed class FakeHyperVGroupService : IHyperVGroupService
 
     public Task RemoveVmFromGroupAsync(string targetName, Guid vmId, Guid groupId, CancellationToken cancellationToken) => Task.CompletedTask;
 
+    public Task<ClusterConfigInfo> GetClusterConfigAsync(string targetName, CancellationToken cancellationToken) =>
+        Task.FromResult(new ClusterConfigInfo
+        {
+            IsCluster = false,
+        });
+
+    public Task SetConfigStoreRootPathAsync(string targetName, string path, CancellationToken cancellationToken) => Task.CompletedTask;
+
     public Task<ApplyChangesResult> ApplyChangesAsync(string targetName, IReadOnlyList<VmGroupMembershipChange> changes, CancellationToken cancellationToken)
     {
+        ApplyChangesCallCount++;
+        LastAppliedTargetName = targetName;
         LastAppliedChanges = changes;
 
         if (ExceptionOnApplyChanges is not null)

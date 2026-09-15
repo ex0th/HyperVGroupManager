@@ -1,7 +1,9 @@
+using System.IO;
 using HyperVGroupManager.Core.Exceptions;
 using HyperVGroupManager.Core.Interfaces;
 using HyperVGroupManager.Core.Models;
 using HyperVGroupManager.Core.Results;
+using HyperVGroupManager.Core.Services;
 
 namespace HyperVGroupManager.App.Services;
 
@@ -32,12 +34,19 @@ public sealed class HyperVGroupService : IHyperVGroupService
 
         if (!result.Success || result.Data is null)
         {
-            // Test-HVGMEnvironment liefert Success=false ausschließlich, wenn das
-            // Hyper-V-Modul selbst fehlt - alle anderen Probleme landen als Warnings.
-            throw new HyperVModuleMissingException(JoinErrors(result.Errors));
+            var message = JoinErrors(result.Errors);
+            var moduleIsMissing = result.Errors.Any(error =>
+                error.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase) &&
+                error.Contains("Modul", StringComparison.OrdinalIgnoreCase));
+            if (moduleIsMissing)
+            {
+                throw new HyperVModuleMissingException(message);
+            }
+
+            throw new HyperVConnectionException(message);
         }
 
-        foreach (var warning in result.Warnings)
+        foreach (var warning in result.Warnings ?? Array.Empty<string>())
         {
             _logService.LogWarning(warning);
         }
@@ -127,7 +136,29 @@ public sealed class HyperVGroupService : IHyperVGroupService
 
     public async Task<ApplyChangesResult> ApplyChangesAsync(string targetName, IReadOnlyList<VmGroupMembershipChange> changes, CancellationToken cancellationToken)
     {
-        var changePayload = changes.Select(change => new
+        if (string.IsNullOrWhiteSpace(targetName))
+        {
+            throw new VmGroupOperationException("Ohne Host- oder Clustername können keine Änderungen angewendet werden.");
+        }
+
+        var validation = ChangeSetValidator.ValidateStructure(changes);
+        if (!validation.IsValid)
+        {
+            throw new VmGroupOperationException(
+                "Der Änderungssatz ist ungültig: " + string.Join("; ", validation.Errors));
+        }
+
+        foreach (var warning in validation.Warnings)
+        {
+            _logService.LogWarning($"Änderungssatz: {warning}");
+        }
+
+        var orderedChanges = changes
+            .OrderBy(change => VmGroupChangeQueue.GetExecutionPriority(change.ChangeType))
+            .ThenBy(change => change.CreatedAt)
+            .ToArray();
+
+        var changePayload = orderedChanges.Select(change => new
         {
             ChangeType = change.ChangeType.ToString(),
             change.VmId,
@@ -151,11 +182,18 @@ public sealed class HyperVGroupService : IHyperVGroupService
             throw new VmGroupOperationException(message);
         }
 
+        ValidateApplyResponse(orderedChanges, result);
+
         foreach (var item in result.Data)
         {
+            if (item is null)
+            {
+                throw new VmGroupOperationException("Ungültige Backend-Antwort: Ein Einzelergebnis ist leer.");
+            }
+
             if (item.Success)
             {
-                foreach (var warning in item.Warnings)
+                foreach (var warning in item.Warnings ?? Array.Empty<string>())
                 {
                     _logService.LogWarning(warning);
                 }
@@ -167,6 +205,38 @@ public sealed class HyperVGroupService : IHyperVGroupService
         }
 
         return new ApplyChangesResult { Success = result.Success, Results = result.Data };
+    }
+
+    private void ValidateApplyResponse(
+        IReadOnlyList<VmGroupMembershipChange> changes,
+        Core.Results.PowerShellResult<IReadOnlyList<ChangeApplicationResult>> result)
+    {
+        var itemResults = result.Data!;
+        if (itemResults.Count != changes.Count)
+        {
+            var message = $"Ungültige Backend-Antwort: {itemResults.Count} Ergebnisse für {changes.Count} Änderungen.";
+            _logService.LogError(message);
+            throw new VmGroupOperationException(message);
+        }
+
+        for (var index = 0; index < changes.Count; index++)
+        {
+            var expected = changes[index];
+            var actual = itemResults[index];
+            if (actual is null || actual.ChangeType != expected.ChangeType || actual.VmId != expected.VmId || actual.GroupId != expected.GroupId)
+            {
+                var message = $"Ungültige Backend-Antwort: Ergebnis {index + 1} kann nicht sicher der gesendeten Änderung zugeordnet werden.";
+                _logService.LogError(message);
+                throw new VmGroupOperationException(message);
+            }
+        }
+
+        if (result.Success != itemResults.All(item => item.Success))
+        {
+            var message = "Ungültige Backend-Antwort: Gesamtstatus und Einzelergebnisse widersprechen sich.";
+            _logService.LogError(message);
+            throw new VmGroupOperationException(message);
+        }
     }
 
     public async Task<ClusterConfigInfo> GetClusterConfigAsync(string targetName, CancellationToken cancellationToken)
@@ -184,6 +254,16 @@ public sealed class HyperVGroupService : IHyperVGroupService
 
     public async Task SetConfigStoreRootPathAsync(string targetName, string path, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(targetName))
+        {
+            throw new VmGroupOperationException("Ohne verbundenes Ziel kann der Clusterpfad nicht geändert werden.");
+        }
+
+        if (string.IsNullOrWhiteSpace(path) || path.Length > 1024 || path.Any(char.IsControl) || !Path.IsPathFullyQualified(path))
+        {
+            throw new VmGroupOperationException("ConfigStoreRootPath muss ein vollständig qualifizierter Windows-Pfad mit höchstens 1024 Zeichen sein.");
+        }
+
         var result = await _executor.ExecuteAsync<object>(
             "Set-HVGMConfigStoreRootPath",
             new { TargetName = targetName, Path = path },
@@ -209,6 +289,9 @@ public sealed class HyperVGroupService : IHyperVGroupService
         throw new VmGroupOperationException(message);
     }
 
-    private static string JoinErrors(IReadOnlyList<string> errors) =>
-        errors.Count > 0 ? string.Join("; ", errors) : "Unbekannter Fehler.";
+    private static string JoinErrors(IReadOnlyList<string>? errors)
+    {
+        var usefulErrors = errors?.Where(error => !string.IsNullOrWhiteSpace(error)).ToArray() ?? Array.Empty<string>();
+        return usefulErrors.Length > 0 ? string.Join("; ", usefulErrors) : "Unbekannter Fehler.";
+    }
 }

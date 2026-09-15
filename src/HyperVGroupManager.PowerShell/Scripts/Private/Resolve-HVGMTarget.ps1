@@ -12,6 +12,8 @@
         [string]$TargetName
     )
 
+    Assert-HVGMTargetName -TargetName $TargetName
+
     try {
         # Wenn dies erfolgreich ist, handelt es sich um einen Failover-Cluster.
         Get-Cluster -Name $TargetName -ErrorAction Stop | Out-Null

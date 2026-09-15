@@ -5,6 +5,7 @@ namespace HyperVGroupManager.Core.Services;
 public enum ChangeQueueAddResult
 {
     Added,
+    Updated,
     DuplicateIgnored,
     CancelledOut,
 }
@@ -22,6 +23,25 @@ public sealed class VmGroupChangeQueue
 
     public ChangeQueueAddResult Add(VmGroupMembershipChange change)
     {
+        ArgumentNullException.ThrowIfNull(change);
+
+        if (change.ChangeType == VmGroupChangeType.RenameGroup)
+        {
+            var existingRename = _changes.FirstOrDefault(existing =>
+                existing.ChangeType == VmGroupChangeType.RenameGroup && existing.GroupId == change.GroupId);
+
+            if (existingRename is not null)
+            {
+                if (string.Equals(existingRename.GroupName, change.GroupName, StringComparison.Ordinal))
+                {
+                    return ChangeQueueAddResult.DuplicateIgnored;
+                }
+
+                _changes[_changes.IndexOf(existingRename)] = change;
+                return ChangeQueueAddResult.Updated;
+            }
+        }
+
         if (_changes.Any(existing => IsSameChange(existing, change)))
         {
             return ChangeQueueAddResult.DuplicateIgnored;
@@ -31,7 +51,25 @@ public sealed class VmGroupChangeQueue
         if (opposite is not null)
         {
             _changes.Remove(opposite);
+
+            // Wird eine noch nicht angelegte Gruppe wieder verworfen, dürfen keine
+            // abhängigen Änderungen mit ihrer clientseitigen Platzhalter-ID übrig bleiben.
+            if (change.ChangeType == VmGroupChangeType.DeleteGroup &&
+                opposite.ChangeType == VmGroupChangeType.CreateGroup)
+            {
+                _changes.RemoveAll(existing => existing.GroupId == change.GroupId);
+            }
+
             return ChangeQueueAddResult.CancelledOut;
+        }
+
+        if (change.ChangeType == VmGroupChangeType.DeleteGroup)
+        {
+            // Umbenennen und Hinzufügen wären vor einem Löschen wirkungslos. Geplante
+            // Entfernungen bleiben bestehen, da sie die Gruppe erst löschbar machen.
+            _changes.RemoveAll(existing =>
+                existing.GroupId == change.GroupId &&
+                existing.ChangeType is VmGroupChangeType.RenameGroup or VmGroupChangeType.AddMembership);
         }
 
         _changes.Add(change);
@@ -42,6 +80,16 @@ public sealed class VmGroupChangeQueue
 
     public void Clear() => _changes.Clear();
 
+    public void ReplaceAll(IEnumerable<VmGroupMembershipChange> changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        _changes.Clear();
+        foreach (var change in changes)
+        {
+            Add(change);
+        }
+    }
+
     /// <summary>
     /// Liefert die Änderungen in der empfohlenen Ausführungsreihenfolge:
     /// Gruppen erstellen -> umbenennen -> Mitgliedschaften hinzufügen -> entfernen -> Gruppen löschen.
@@ -49,11 +97,11 @@ public sealed class VmGroupChangeQueue
     public IReadOnlyList<VmGroupMembershipChange> GetInExecutionOrder()
     {
         return _changes
-            .OrderBy(change => ExecutionOrder(change.ChangeType))
+            .OrderBy(change => GetExecutionPriority(change.ChangeType))
             .ToList();
     }
 
-    private static int ExecutionOrder(VmGroupChangeType changeType) => changeType switch
+    public static int GetExecutionPriority(VmGroupChangeType changeType) => changeType switch
     {
         VmGroupChangeType.CreateGroup => 0,
         VmGroupChangeType.RenameGroup => 1,
