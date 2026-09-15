@@ -46,6 +46,11 @@ PowerShell-JSON-Vertrag: [docs/powershell-json-contract.md](docs/powershell-json
 * vollständige Preflight-Prüfung, Antwortkorrelation und Sperre bei unklarem Serverzustand
 * gehärteter PowerShell-Bootstrap mit Allow-List sowie Ein-/Ausgabelimits
 
+## Neu in 0.3
+
+* integrierte Hilfe über den Hilfe-Button oder `F1`
+* zur Laufzeit umschaltbare Oberfläche auf Deutsch und Englisch; die Auswahl bleibt pro Benutzer erhalten
+
 ## MVP-Umfang
 
 Enthalten: native VM-Gruppen (VMCollectionType) auf Einzelhost und Cluster, Mehrfachmitgliedschaft,

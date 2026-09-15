@@ -1,4 +1,5 @@
 using System.Windows;
+using HyperVGroupManager.App.Localization;
 
 namespace HyperVGroupManager.App.Views;
 
@@ -9,7 +10,7 @@ public partial class RenameGroupDialog : Window
     public RenameGroupDialog(string currentName)
     {
         InitializeComponent();
-        CurrentNameText.Text = $"Neuer Name für '{currentName}':";
+        CurrentNameText.Text = LocalizationService.Instance.Format("Group.RenameLabel", currentName);
         NewNameTextBox.Text = currentName;
         Loaded += (_, _) =>
         {

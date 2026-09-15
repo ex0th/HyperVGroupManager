@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using HyperVGroupManager.App.Services;
+using HyperVGroupManager.App.Localization;
 using HyperVGroupManager.Core.Exceptions;
 using HyperVGroupManager.Core.Interfaces;
 using HyperVGroupManager.Core.Models;
@@ -36,8 +38,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _targetName = string.Empty;
 
-    [ObservableProperty]
-    private string _connectionStatus = "Nicht verbunden";
+    private string _connectionStatusKey = "Connection.Disconnected";
+
+    public string ConnectionStatus => L(_connectionStatusKey);
 
     [ObservableProperty]
     private bool _isConnected;
@@ -92,6 +95,27 @@ public partial class MainViewModel : ObservableObject
         _groupService = groupService;
         _logService = logService;
         _applicationOptions = applicationOptions;
+        LocalizationService.Instance.PropertyChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is "Item[]" or nameof(LocalizationService.CurrentLanguageCode))
+        {
+            OnPropertyChanged(nameof(ConnectionStatus));
+            RefreshPendingChanges();
+        }
+    }
+
+    private static string L(string key, params object?[] arguments) =>
+        arguments.Length == 0
+            ? LocalizationService.Instance.Get(key)
+            : LocalizationService.Instance.Format(key, arguments);
+
+    private void SetConnectionStatus(string key)
+    {
+        _connectionStatusKey = key;
+        OnPropertyChanged(nameof(ConnectionStatus));
     }
 
     partial void OnIsBusyChanged(bool value)
@@ -127,28 +151,28 @@ public partial class MainViewModel : ObservableObject
         var requestedTarget = TargetName.Trim();
         if (requestedTarget.Length == 0)
         {
-            AddStatusMessage("Bitte geben Sie einen Host- oder Clusternamen ein.");
+            AddStatusMessage(L("Status.EnterTarget"));
             return;
         }
 
         if (HasPendingChanges && _connectedTargetName is not null &&
             !string.Equals(requestedTarget, _connectedTargetName, StringComparison.OrdinalIgnoreCase))
         {
-            var message = $"Es sind Änderungen für '{_connectedTargetName}' geplant. Wenden Sie diese an oder verwerfen Sie sie, bevor Sie zu '{requestedTarget}' wechseln.";
+            var message = L("Status.TargetSwitchBlocked", _connectedTargetName, requestedTarget);
             AddStatusMessage(message);
             ErrorOccurred?.Invoke(this, message);
             return;
         }
 
         IsBusy = true;
-        ConnectionStatus = "Verbinde …";
+        SetConnectionStatus("Connection.Connecting");
 
         try
         {
             var environment = await _groupService.TestEnvironmentAsync(requestedTarget, cancellationToken);
             foreach (var warning in environment.Warnings)
             {
-                AddStatusMessage($"Warnung: {warning}");
+                AddStatusMessage(L("Status.Warning", warning));
             }
 
             if (_connectedTargetName is not null &&
@@ -161,21 +185,21 @@ public partial class MainViewModel : ObservableObject
             _connectedTargetName = requestedTarget;
             TargetName = requestedTarget;
             IsConnected = true;
-            ConnectionStatus = "Verbunden";
+            SetConnectionStatus("Connection.Connected");
             OnPropertyChanged(nameof(ConnectedTargetName));
             _logService.LogInformation(
                 $"Verbindung zu '{requestedTarget}' aufgebaut ({environment.TargetType}, Nodes: {string.Join(", ", environment.Nodes)}).");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            ConnectionStatus = "Abgebrochen";
-            AddStatusMessage("Verbindungsaufbau abgebrochen.");
+            SetConnectionStatus("Connection.Cancelled");
+            AddStatusMessage(L("Status.ConnectCancelled"));
         }
         catch (Exception ex) when (ex is HyperVConnectionException or HyperVModuleMissingException or PowerShellExecutionException)
         {
             IsConnected = false;
-            ConnectionStatus = "Fehler";
-            AddStatusMessage($"Verbindung fehlgeschlagen: {ex.Message}");
+            SetConnectionStatus("Connection.Error");
+            AddStatusMessage(L("Status.ConnectFailed", ex.Message));
             _logService.LogError($"Verbindung zu '{requestedTarget}' fehlgeschlagen.", ex);
             ErrorOccurred?.Invoke(this, ex.Message);
         }
@@ -197,15 +221,15 @@ public partial class MainViewModel : ObservableObject
         try
         {
             await LoadDataAsync(target, cancellationToken);
-            ConnectionStatus = "Verbunden";
+            SetConnectionStatus("Connection.Connected");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            AddStatusMessage("Aktualisierung abgebrochen.");
+            AddStatusMessage(L("Status.RefreshCancelled"));
         }
         catch (Exception ex) when (ex is HyperVConnectionException or PowerShellExecutionException)
         {
-            AddStatusMessage($"Aktualisierung fehlgeschlagen: {ex.Message}");
+            AddStatusMessage(L("Status.RefreshFailed", ex.Message));
             _logService.LogError("Aktualisierung fehlgeschlagen.", ex);
             ErrorOccurred?.Invoke(this, ex.Message);
         }
@@ -230,7 +254,7 @@ public partial class MainViewModel : ObservableObject
 
         foreach (var warning in snapshotValidation.Warnings)
         {
-            AddStatusMessage($"Datenprüfung: {warning}");
+            AddStatusMessage(L("Status.DataCheck", warning));
             _logService.LogWarning($"Server-Snapshot '{target}': {warning}");
         }
 
@@ -243,7 +267,7 @@ public partial class MainViewModel : ObservableObject
         RebuildEffectiveState();
         LastRefreshedAt = DateTime.Now;
         OnPropertyChanged(nameof(IsStateUncertain));
-        AddStatusMessage($"{_serverVirtualMachines.Count} VMs und {_serverGroups.Count} Gruppen geladen.");
+        AddStatusMessage(L("Status.Loaded", _serverVirtualMachines.Count, _serverGroups.Count));
     }
 
     [RelayCommand(CanExecute = nameof(CanModifyPlan))]
@@ -252,7 +276,7 @@ public partial class MainViewModel : ObservableObject
         var validation = GroupNameValidator.Validate(groupName, _allGroups.Select(group => group.Name));
         if (!validation.IsValid)
         {
-            AddStatusMessage($"Gruppe konnte nicht angelegt werden: {validation.ErrorMessage}");
+            AddStatusMessage(L("Status.CreateInvalid", validation.ErrorMessage));
             return;
         }
 
@@ -263,12 +287,12 @@ public partial class MainViewModel : ObservableObject
             ChangeType = VmGroupChangeType.CreateGroup,
             GroupId = pendingGroupId,
             GroupName = trimmedName,
-            Description = $"Gruppe '{trimmedName}' erstellen",
+            Description = L("Change.DescriptionCreate", trimmedName),
         });
 
         QueueChanged();
         SelectedGroup = _allGroups.FirstOrDefault(group => group.Id == pendingGroupId);
-        AddStatusMessage($"Gruppe '{trimmedName}' geplant.");
+        AddStatusMessage(L("Status.GroupPlanned", trimmedName));
     }
 
     [RelayCommand(CanExecute = nameof(CanModifyPlan))]
@@ -276,7 +300,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (SelectedGroup is null)
         {
-            AddStatusMessage("Bitte zuerst eine Gruppe auswählen.");
+            AddStatusMessage(L("Dialog.SelectGroup"));
             return;
         }
 
@@ -284,14 +308,14 @@ public partial class MainViewModel : ObservableObject
         var validation = GroupNameValidator.Validate(newName, _allGroups.Where(item => item.Id != group.Id).Select(item => item.Name));
         if (!validation.IsValid)
         {
-            AddStatusMessage($"Gruppe konnte nicht umbenannt werden: {validation.ErrorMessage}");
+            AddStatusMessage(L("Status.RenameInvalid", validation.ErrorMessage));
             return;
         }
 
         var trimmedName = newName!.Trim();
         if (string.Equals(group.Name, trimmedName, StringComparison.Ordinal))
         {
-            AddStatusMessage("Der neue Gruppenname ist unverändert.");
+            AddStatusMessage(L("Status.NameUnchanged"));
             return;
         }
 
@@ -303,7 +327,7 @@ public partial class MainViewModel : ObservableObject
             _changeQueue.Add(pendingCreate with
             {
                 GroupName = trimmedName,
-                Description = $"Gruppe '{trimmedName}' erstellen",
+                Description = L("Change.DescriptionCreate", trimmedName),
             });
         }
         else
@@ -313,12 +337,12 @@ public partial class MainViewModel : ObservableObject
                 ChangeType = VmGroupChangeType.RenameGroup,
                 GroupId = group.Id,
                 GroupName = trimmedName,
-                Description = $"Gruppe '{group.Name}' in '{trimmedName}' umbenennen",
+                Description = L("Change.DescriptionRename", group.Name, trimmedName),
             });
         }
 
         QueueChanged(group.Id);
-        AddStatusMessage($"Umbenennung von '{group.Name}' in '{trimmedName}' geplant.");
+        AddStatusMessage(L("Status.RenamePlanned", group.Name, trimmedName));
     }
 
     [RelayCommand(CanExecute = nameof(CanModifyPlan))]
@@ -326,7 +350,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (SelectedGroup is null)
         {
-            AddStatusMessage("Bitte zuerst eine Gruppe auswählen.");
+            AddStatusMessage(L("Dialog.SelectGroup"));
             return;
         }
 
@@ -342,12 +366,12 @@ public partial class MainViewModel : ObservableObject
             ChangeType = VmGroupChangeType.DeleteGroup,
             GroupId = group.Id,
             GroupName = group.Name,
-            Description = $"Gruppe '{group.Name}' löschen",
+            Description = L("Change.DescriptionDelete", group.Name),
         });
 
         SelectedGroup = null;
         QueueChanged();
-        AddStatusMessage($"Löschen von '{group.Name}' geplant.");
+        AddStatusMessage(L("Status.DeletePlanned", group.Name));
     }
 
     [RelayCommand(CanExecute = nameof(CanModifyPlan))]
@@ -376,7 +400,7 @@ public partial class MainViewModel : ObservableObject
                 VmName = currentVm.Name,
                 GroupId = group.Id,
                 GroupName = group.Name,
-                Description = $"'{currentVm.Name}' zu '{group.Name}' hinzufügen",
+                Description = L("Change.DescriptionAdd", currentVm.Name, group.Name),
             });
             if (result is ChangeQueueAddResult.Added or ChangeQueueAddResult.Updated)
             {
@@ -389,7 +413,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         QueueChanged(group.Id);
-        AddStatusMessage(BuildMembershipStatus(added, skipped, $"zu '{group.Name}' hinzugefügt"));
+        AddStatusMessage(BuildMembershipStatus(added, skipped, L("Operation.AddedTo", group.Name)));
     }
 
     [RelayCommand(CanExecute = nameof(CanModifyPlan))]
@@ -418,7 +442,7 @@ public partial class MainViewModel : ObservableObject
                 VmName = currentVm.Name,
                 GroupId = group.Id,
                 GroupName = group.Name,
-                Description = $"'{currentVm.Name}' aus '{group.Name}' entfernen",
+                Description = L("Change.DescriptionRemove", currentVm.Name, group.Name),
             });
             if (result is ChangeQueueAddResult.Added or ChangeQueueAddResult.Updated)
             {
@@ -431,7 +455,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         QueueChanged(group.Id);
-        AddStatusMessage(BuildMembershipStatus(removed, skipped, $"aus '{group.Name}' entfernt"));
+        AddStatusMessage(BuildMembershipStatus(removed, skipped, L("Operation.RemovedFrom", group.Name)));
     }
 
     [RelayCommand(CanExecute = nameof(CanInteract))]
@@ -444,7 +468,7 @@ public partial class MainViewModel : ObservableObject
 
         if (_requiresRefreshBeforeApply)
         {
-            var message = "Der tatsächliche Serverzustand ist nach einem abgebrochenen oder fehlgeschlagenen Lauf unklar. Bitte zuerst aktualisieren.";
+            var message = L("Status.StateUncertain");
             AddStatusMessage(message);
             ErrorOccurred?.Invoke(this, message);
             return;
@@ -452,7 +476,7 @@ public partial class MainViewModel : ObservableObject
 
         if (!HasPendingChanges)
         {
-            AddStatusMessage("Keine Änderungen zum Anwenden vorhanden.");
+            AddStatusMessage(L("Status.NoChanges"));
             return;
         }
 
@@ -460,13 +484,13 @@ public partial class MainViewModel : ObservableObject
         var validation = ChangeSetValidator.Validate(_serverVirtualMachines, _serverGroups, orderedChanges);
         foreach (var warning in validation.Warnings)
         {
-            AddStatusMessage($"Vorabprüfung: {warning}");
+            AddStatusMessage(L("Status.Preflight", warning));
         }
 
         if (!validation.IsValid)
         {
-            var message = "Die Änderungen wurden aus Sicherheitsgründen nicht ausgeführt:\n- " + string.Join("\n- ", validation.Errors);
-            AddStatusMessage("Vorabprüfung fehlgeschlagen. Es wurde nichts verändert.");
+            var message = L("Status.PreflightBlocked", string.Join("\n- ", validation.Errors));
+            AddStatusMessage(L("Status.PreflightFailed"));
             _logService.LogError(message);
             ErrorOccurred?.Invoke(this, message);
             return;
@@ -482,14 +506,14 @@ public partial class MainViewModel : ObservableObject
 
             if (applyResult.Success)
             {
-                AddStatusMessage($"{applyResult.Results.Count} Änderung(en) erfolgreich angewendet.");
+                AddStatusMessage(L("Status.ApplySuccess", applyResult.Results.Count));
                 _logService.LogInformation($"{applyResult.Results.Count} Änderung(en) auf '{target}' angewendet.");
                 ClearPendingChanges();
             }
             else
             {
                 var failedCount = applyResult.Results.Count(result => !result.Success);
-                AddStatusMessage($"Änderungslauf teilweise fehlgeschlagen ({failedCount} von {applyResult.Results.Count}).");
+                AddStatusMessage(L("Status.ApplyPartial", failedCount, applyResult.Results.Count));
                 _logService.LogError($"Änderungslauf auf '{target}' teilweise fehlgeschlagen.");
                 RemoveAppliedChangesFromQueue(applyResult.Results);
             }
@@ -500,19 +524,19 @@ public partial class MainViewModel : ObservableObject
             }
             catch (Exception ex) when (ex is HyperVConnectionException or PowerShellExecutionException)
             {
-                MarkStateUncertain("Die Änderungen wurden verarbeitet, aber der neue Serverzustand konnte nicht gelesen werden. Vor einem erneuten Anwenden ist eine Aktualisierung erforderlich.", ex);
+                MarkStateUncertain(L("Status.PostReadFailed"), ex);
             }
         }
         catch (OperationCanceledException)
         {
             MarkStateUncertain(
                 serverMayHaveChanged
-                    ? "Der Lauf wurde während der Nachkontrolle abgebrochen. Der Serverzustand muss neu geladen werden."
-                    : "Der Änderungslauf wurde abgebrochen. Es ist möglich, dass einzelne Änderungen bereits ausgeführt wurden; bitte aktualisieren Sie den Zustand.");
+                    ? L("Status.PostCheckCancelled")
+                    : L("Status.ApplyCancelled"));
         }
         catch (Exception ex) when (ex is VmGroupOperationException or PowerShellExecutionException or HyperVConnectionException)
         {
-            MarkStateUncertain("Der Änderungslauf ist ohne verlässliches Einzelergebnis fehlgeschlagen. Einzelne Änderungen könnten bereits ausgeführt worden sein; bitte aktualisieren Sie den Zustand.", ex);
+            MarkStateUncertain(L("Status.ApplyUnknownFailure"), ex);
         }
         finally
         {
@@ -525,7 +549,7 @@ public partial class MainViewModel : ObservableObject
     {
         ClearPendingChanges();
         RebuildEffectiveState();
-        AddStatusMessage("Geplante Änderungen verworfen.");
+        AddStatusMessage(L("Status.Discarded"));
     }
 
     [RelayCommand(CanExecute = nameof(CanInteract))]
@@ -545,12 +569,12 @@ public partial class MainViewModel : ObservableObject
         {
             var json = ConfigurationExportBuilder.Build(target, _allGroups);
             await File.WriteAllTextAsync(filePath, json, Encoding.UTF8);
-            AddStatusMessage($"Erwartete Konfiguration exportiert nach '{filePath}'.");
+            AddStatusMessage(L("Status.ExportSuccess", filePath));
             _logService.LogInformation($"Konfiguration exportiert nach '{filePath}'.");
         }
         catch (IOException ex)
         {
-            AddStatusMessage($"Export fehlgeschlagen: {ex.Message}");
+            AddStatusMessage(L("Status.ExportFailed", ex.Message));
             _logService.LogError("Export der Konfiguration fehlgeschlagen.", ex);
             ErrorOccurred?.Invoke(this, ex.Message);
         }
@@ -650,7 +674,7 @@ public partial class MainViewModel : ObservableObject
             return true;
         }
 
-        AddStatusMessage("Bitte zuerst eine Verbindung zu einem Host oder Cluster herstellen.");
+        AddStatusMessage(L("Status.ConnectTargetFirst"));
         return false;
     }
 
@@ -662,14 +686,14 @@ public partial class MainViewModel : ObservableObject
         selectedVms = SelectedVirtualMachines.GroupBy(vm => vm.Id).Select(items => items.First()).ToArray();
         if (SelectedGroup is null)
         {
-            AddStatusMessage("Bitte zuerst eine Gruppe auswählen.");
+            AddStatusMessage(L("Dialog.SelectGroup"));
             return false;
         }
 
         group = SelectedGroup;
         if (selectedVms.Count == 0)
         {
-            AddStatusMessage("Bitte mindestens eine VM auswählen.");
+            AddStatusMessage(L("Status.SelectVm"));
             return false;
         }
 
@@ -701,21 +725,21 @@ public partial class MainViewModel : ObservableObject
     private void MarkStateUncertain(string message, Exception? exception = null)
     {
         _requiresRefreshBeforeApply = true;
-        ConnectionStatus = "Zustand prüfen";
+        SetConnectionStatus("Connection.VerifyState");
         OnPropertyChanged(nameof(IsStateUncertain));
         NotifyPlanningCommandStateChanged();
         AddStatusMessage(message);
         _logService.LogError(message, exception);
-        ErrorOccurred?.Invoke(this, message + (exception is null ? string.Empty : $"\n\nDetails: {exception.Message}"));
+        ErrorOccurred?.Invoke(this, message + (exception is null ? string.Empty : $"\n\n{L("Result.Details", exception.Message)}"));
     }
 
     private static string BuildApplyResultSummary(ApplyChangesResult applyResult)
     {
         var header = applyResult.Success
-            ? $"{applyResult.Results.Count} Änderung(en) erfolgreich angewendet:"
-            : $"{applyResult.Results.Count(result => !result.Success)} von {applyResult.Results.Count} Änderung(en) fehlgeschlagen:";
+            ? L("Result.SuccessHeader", applyResult.Results.Count)
+            : L("Result.FailedHeader", applyResult.Results.Count(result => !result.Success), applyResult.Results.Count);
         var lines = applyResult.Results.Select(result =>
-            result.Success ? $"- OK: {result.Description}" : $"- FEHLER: {result.Description} ({result.Error})");
+            result.Success ? $"- OK: {result.Description}" : $"- {L("Result.Error")}: {result.Description} ({result.Error})");
         return header + "\n" + string.Join("\n", lines);
     }
 
@@ -731,8 +755,8 @@ public partial class MainViewModel : ObservableObject
 
     private static string BuildMembershipStatus(int changed, int skipped, string operation)
     {
-        var suffix = skipped > 0 ? $"; {skipped} bereits im gewünschten Zustand" : string.Empty;
-        return $"{changed} VM(s) zum {operation} geplant{suffix}.";
+        var suffix = skipped > 0 ? L("Status.AlreadyDesired", skipped) : string.Empty;
+        return L("Status.MembershipPlanned", changed, operation, suffix);
     }
 
     private void AddStatusMessage(string message)

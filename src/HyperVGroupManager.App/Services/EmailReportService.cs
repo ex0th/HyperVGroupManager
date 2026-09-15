@@ -2,6 +2,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using HyperVGroupManager.App.Localization;
 using HyperVGroupManager.Core.Interfaces;
 
 namespace HyperVGroupManager.App.Services;
@@ -77,7 +78,7 @@ public sealed class EmailReportService
             cancellationToken);
 
         return result.Success
-            ? (true, result.Data ?? "E-Mail-Bericht wurde erfolgreich gesendet.")
+            ? (true, result.Data ?? LocalizationService.Instance.Get("Email.SendSuccess"))
             : (false, string.Join("\n", result.Errors ?? Array.Empty<string>()));
     }
 
@@ -96,7 +97,7 @@ public sealed class EmailReportService
             cancellationToken);
 
         return result.Success
-            ? (true, result.Data ?? "Aufgabe wurde erfolgreich registriert.")
+            ? (true, result.Data ?? LocalizationService.Instance.Get("Email.RegisterSuccess"))
             : (false, string.Join("\n", result.Errors ?? Array.Empty<string>()));
     }
 
@@ -109,7 +110,7 @@ public sealed class EmailReportService
             cancellationToken);
 
         return result.Success
-            ? (true, result.Data ?? "Aufgabe wurde erfolgreich entfernt.")
+            ? (true, result.Data ?? LocalizationService.Instance.Get("Email.RemoveSuccess"))
             : (false, string.Join("\n", result.Errors ?? Array.Empty<string>()));
     }
 

@@ -66,6 +66,12 @@ Für andere Architekturen `-r win-x64` durch z. B. `-r win-arm64` ersetzen und i
    JSON-Datei über einen Speichern-Dialog. Bei einer offenen Queue wird der erwartete Zustand
    exportiert.
 
+Über **Hilfe** oder die Taste `F1` öffnet sich eine integrierte Dokumentationsseite mit
+Schnellstart, Sicherheitskonzept, E-Mail-Berichten und Hinweisen zur Fehlersuche. Die Sprache kann
+oben rechts jederzeit zwischen **Deutsch** und **English** umgeschaltet werden. Die Auswahl wird in
+`%LocalAppData%\HyperVGroupManager\ui-language.txt` gespeichert; der portable Programmordner wird
+dabei nicht verändert.
+
 Ein Wechsel zu einem anderen Ziel ist mit offenen Änderungen blockiert. Nach Timeout, Abbruch oder
 einer nicht eindeutig zuordenbaren Backend-Antwort sperrt die Anwendung weitere Schreibvorgänge,
 bis **Aktualisieren** den tatsächlichen Zustand erfolgreich neu geladen hat.

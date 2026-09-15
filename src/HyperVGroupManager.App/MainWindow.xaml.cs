@@ -2,6 +2,8 @@ using System.Linq;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using HyperVGroupManager.App.Localization;
 using HyperVGroupManager.App.Services;
 using HyperVGroupManager.App.ViewModels;
 using HyperVGroupManager.App.Views;
@@ -34,11 +36,31 @@ namespace HyperVGroupManager.App
             _viewModel.ChangesApplied += OnViewModelChangesApplied;
         }
 
+        private static string L(string key, params object?[] arguments) =>
+            arguments.Length == 0
+                ? LocalizationService.Instance.Get(key)
+                : LocalizationService.Instance.Format(key, arguments);
+
         private void OnViewModelErrorOccurred(object? sender, string message) =>
-            new MessageDialog("Fehlerdetails", message) { Owner = this }.ShowDialog();
+            new MessageDialog(L("Dialog.ErrorDetails"), message) { Owner = this }.ShowDialog();
 
         private void OnViewModelChangesApplied(object? sender, string summary) =>
-            new MessageDialog("Ergebnis des Änderungslaufs", summary) { Owner = this }.ShowDialog();
+            new MessageDialog(L("Dialog.ApplyResult"), summary) { Owner = this }.ShowDialog();
+
+        private void HelpButton_Click(object sender, RoutedEventArgs e) => ShowHelp();
+
+        private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.F1)
+            {
+                return;
+            }
+
+            ShowHelp();
+            e.Handled = true;
+        }
+
+        private void ShowHelp() => new HelpWindow { Owner = this }.ShowDialog();
 
         private void VirtualMachinesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -63,7 +85,7 @@ namespace HyperVGroupManager.App
             var selectedGroup = _viewModel.SelectedGroup;
             if (selectedGroup is null)
             {
-                MessageBox.Show(this, "Bitte zuerst eine Gruppe auswählen.", "Hinweis", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, L("Dialog.SelectGroup"), L("Dialog.Information"), MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -79,7 +101,7 @@ namespace HyperVGroupManager.App
             var selectedGroup = _viewModel.SelectedGroup;
             if (selectedGroup is null)
             {
-                MessageBox.Show(this, "Bitte zuerst eine Gruppe auswählen.", "Hinweis", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, L("Dialog.SelectGroup"), L("Dialog.Information"), MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -94,7 +116,7 @@ namespace HyperVGroupManager.App
         {
             if (!_viewModel.IsConnected)
             {
-                MessageBox.Show(this, "Bitte zuerst eine Verbindung herstellen.", "Keine Verbindung", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, L("Dialog.ConnectFirst"), L("Dialog.NoConnection"), MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -105,13 +127,13 @@ namespace HyperVGroupManager.App
         {
             if (!_viewModel.IsConnected)
             {
-                MessageBox.Show(this, "Bitte zuerst eine Verbindung herstellen.", "Keine Verbindung", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, L("Dialog.ConnectFirst"), L("Dialog.NoConnection"), MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             var saveFileDialog = new SaveFileDialog
             {
-                Filter = "JSON-Datei (*.json)|*.json",
+                Filter = L("Dialog.JsonFilter"),
                 FileName = $"HyperVGroupManager-Export-{DateTime.Now:yyyy-MM-dd}.json",
             };
 
@@ -132,9 +154,8 @@ namespace HyperVGroupManager.App
             {
                 var confirmation = MessageBox.Show(
                     this,
-                    $"{_viewModel.PendingChangeCount} Änderung(en) werden auf '{_viewModel.ConnectedTargetName}' angewendet.\n\n" +
-                    "Der Änderungssatz wird unmittelbar vorher nochmals vollständig geprüft. Fortfahren?",
-                    "Änderungen anwenden",
+                    L("Dialog.ApplyConfirm", _viewModel.PendingChangeCount, _viewModel.ConnectedTargetName),
+                    L("Dialog.ApplyTitle"),
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning,
                     MessageBoxResult.No);
@@ -157,8 +178,8 @@ namespace HyperVGroupManager.App
 
             var result = MessageBox.Show(
                 this,
-                $"Es sind noch {_viewModel.PendingChangeCount} nicht angewendete Änderung(en) vorhanden. Beim Beenden gehen sie verloren.\n\nAnwendung trotzdem schließen?",
-                "Geplante Änderungen verwerfen",
+                L("Dialog.CloseConfirm", _viewModel.PendingChangeCount),
+                L("Dialog.CloseTitle"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
                 MessageBoxResult.No);

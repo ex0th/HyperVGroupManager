@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Mail;
+using HyperVGroupManager.App.Localization;
 
 namespace HyperVGroupManager.App.Services;
 
@@ -15,6 +16,11 @@ public sealed record EmailReportValidationResult
 /// </summary>
 public static class EmailReportConfigValidator
 {
+    private static string L(string key, params object?[] arguments) =>
+        arguments.Length == 0
+            ? LocalizationService.Instance.Get(key)
+            : LocalizationService.Instance.Format(key, arguments);
+
     public static EmailReportValidationResult ValidateForSend(EmailReportConfig config) =>
         Validate(config, requireSchedule: false);
 
@@ -26,34 +32,34 @@ public static class EmailReportConfigValidator
         ArgumentNullException.ThrowIfNull(config);
         var errors = new List<string>();
 
-        ValidateRequiredText(config.TargetName, "Ziel-Host/Cluster", 255, errors);
-        ValidateRequiredText(config.SmtpHost, "SMTP-Server", 255, errors);
+        ValidateRequiredText(config.TargetName, L("Email.TargetName"), 255, errors);
+        ValidateRequiredText(config.SmtpHost, L("Email.SmtpName"), 255, errors);
         if (config.SmtpPort is < 1 or > 65535)
         {
-            errors.Add("Der SMTP-Port muss zwischen 1 und 65535 liegen.");
+            errors.Add(L("Email.InvalidPort"));
         }
 
         if (config.SmtpSecurity is not ("None" or "STARTTLS" or "SSL"))
         {
-            errors.Add("Die SMTP-Verschlüsselung muss None, STARTTLS oder SSL sein.");
+            errors.Add(L("Email.InvalidSecurity"));
         }
 
         if (config.UseAuthentication)
         {
-            ValidateRequiredText(config.Username, "SMTP-Benutzername", 512, errors);
+            ValidateRequiredText(config.Username, L("Email.Username"), 512, errors);
             if (string.IsNullOrEmpty(config.Password))
             {
-                errors.Add("Für die SMTP-Authentifizierung fehlt das Kennwort.");
+                errors.Add(L("Email.PasswordMissing"));
             }
             else if (config.Password.Length > 4096)
             {
-                errors.Add("Das SMTP-Kennwort ist ungewöhnlich lang und wurde abgelehnt.");
+                errors.Add(L("Email.PasswordLong"));
             }
         }
 
         if (!IsEmailAddress(config.SenderAddress))
         {
-            errors.Add("Die Absender-Adresse ist ungültig.");
+            errors.Add(L("Email.InvalidSender"));
         }
 
         var recipients = (config.RecipientAddresses ?? new List<string>())
@@ -62,34 +68,34 @@ public static class EmailReportConfigValidator
             .ToArray();
         if (recipients.Length == 0)
         {
-            errors.Add("Es muss mindestens eine Empfänger-Adresse angegeben werden.");
+            errors.Add(L("Email.NoRecipients"));
         }
         else if (recipients.Length > 100)
         {
-            errors.Add("Es sind höchstens 100 Empfänger-Adressen erlaubt.");
+            errors.Add(L("Email.TooManyRecipients"));
         }
 
         foreach (var recipient in recipients.Where(address => !IsEmailAddress(address)))
         {
-            errors.Add($"Die Empfänger-Adresse '{recipient}' ist ungültig.");
+            errors.Add(L("Email.InvalidRecipient", recipient));
         }
 
         if ((config.BodyPrefix?.Length ?? 0) > 10_000)
         {
-            errors.Add("Der Nachrichtenvorspann darf höchstens 10.000 Zeichen enthalten.");
+            errors.Add(L("Email.BodyLong"));
         }
 
         if (requireSchedule)
         {
             if (!TimeOnly.TryParseExact(config.ScheduleTime, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
             {
-                errors.Add("Die Sendezeit muss eine gültige Uhrzeit im Format HH:mm sein.");
+                errors.Add(L("Email.InvalidSchedule"));
             }
 
-            ValidateRequiredText(config.TaskName, "Aufgabenname", 238, errors);
+            ValidateRequiredText(config.TaskName, L("Email.TaskName"), 238, errors);
             if (config.TaskName?.IndexOfAny(new[] { '\\', '/', ':', '*', '?', '"', '<', '>', '|' }) >= 0)
             {
-                errors.Add("Der Aufgabenname enthält unzulässige Zeichen.");
+                errors.Add(L("Email.InvalidTaskName"));
             }
         }
 
@@ -104,13 +110,13 @@ public static class EmailReportConfigValidator
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            errors.Add($"{displayName} darf nicht leer sein.");
+            errors.Add(L("Email.Required", displayName));
             return;
         }
 
         if (value.Length > maximumLength || value.Any(char.IsControl))
         {
-            errors.Add($"{displayName} enthält unzulässige Zeichen oder ist zu lang.");
+            errors.Add(L("Email.InvalidText", displayName));
         }
     }
 }

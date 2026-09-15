@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Threading;
 using HyperVGroupManager.App.Services;
 using HyperVGroupManager.App.ViewModels;
+using HyperVGroupManager.App.Localization;
 using HyperVGroupManager.Core.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ namespace HyperVGroupManager.App
 
             DispatcherUnhandledException += OnDispatcherUnhandledException;
             AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
+            LocalizationService.Instance.Initialize();
 
             var services = new ServiceCollection();
             ConfigureServices(services);
@@ -37,7 +39,11 @@ namespace HyperVGroupManager.App
             logService?.LogError(msg);
             TryWriteCrashLog(msg);
             e.Handled = true;
-            MessageBox.Show(e.Exception.ToString(), "Unbehandelter Fehler", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(
+                e.Exception.ToString(),
+                LocalizationService.Instance.Get("Dialog.UnhandledError"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
         }
 
         private void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)

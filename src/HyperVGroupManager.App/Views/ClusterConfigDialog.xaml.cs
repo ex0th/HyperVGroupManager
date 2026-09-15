@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Media;
+using HyperVGroupManager.App.Localization;
 using HyperVGroupManager.App.Services;
 using HyperVGroupManager.Core.Interfaces;
 using HyperVGroupManager.Core.Models;
@@ -10,6 +11,11 @@ namespace HyperVGroupManager.App.Views;
 
 public partial class ClusterConfigDialog : Window
 {
+    private static string L(string key, params object?[] arguments) =>
+        arguments.Length == 0
+            ? LocalizationService.Instance.Get(key)
+            : LocalizationService.Instance.Format(key, arguments);
+
     // ── Cluster tab
     private readonly IHyperVGroupService _service;
     private readonly string _targetName;
@@ -39,15 +45,15 @@ public partial class ClusterConfigDialog : Window
     {
         if (string.IsNullOrWhiteSpace(_targetName))
         {
-            CurrentPathTextBlock.Text = "(kein Host verbunden)";
+            CurrentPathTextBlock.Text = L("Settings.NoHost");
             CurrentPathTextBlock.Foreground = SystemColors.GrayTextBrush;
-            SetInfoBox(false, "Bitte zuerst einen Host/Cluster in der Hauptansicht verbinden, um die Cluster-Einstellungen zu laden.");
+            SetInfoBox(false, L("Settings.ConnectForCluster"));
             OkButton.IsEnabled = false;
             return;
         }
 
         OkButton.IsEnabled = false;
-        CurrentPathTextBlock.Text = "Wird geladen...";
+        CurrentPathTextBlock.Text = L("Settings.Loading");
         try
         {
             var config = await _service.GetClusterConfigAsync(_targetName, CancellationToken.None);
@@ -55,7 +61,7 @@ public partial class ClusterConfigDialog : Window
         }
         catch (Exception ex)
         {
-            CurrentPathTextBlock.Text = $"Fehler: {ex.Message}";
+            CurrentPathTextBlock.Text = L("Settings.ErrorValue", ex.Message);
             SetInfoBox(false, ex.Message);
         }
     }
@@ -66,7 +72,7 @@ public partial class ClusterConfigDialog : Window
         _currentConfigStoreRootPath = config.ConfigStoreRootPath;
         CurrentPathTextBlock.Text = !string.IsNullOrEmpty(config.ConfigStoreRootPath)
             ? config.ConfigStoreRootPath
-            : "(nicht gesetzt)";
+            : L("Settings.NotSet");
         CurrentPathTextBlock.Foreground = !string.IsNullOrEmpty(config.ConfigStoreRootPath)
             ? SystemColors.WindowTextBrush
             : SystemColors.GrayTextBrush;
@@ -75,16 +81,13 @@ public partial class ClusterConfigDialog : Window
         {
             PathTextBox.Text = config.ConfigStoreRootPath ?? string.Empty;
             OkButton.IsEnabled = true;
-            SetInfoBox(true,
-                "Dieser Pfad legt fest, wo Hyper-V die VM-Gruppen-Konfigurationsdateien des Clusters ablegt. " +
-                "Eine Änderung wirkt sich auf alle Cluster-Knoten aus. " +
-                "Stellen Sie sicher, dass der Pfad auf einem freigegebenen Cluster-Speicher liegt.");
+            SetInfoBox(true, L("Settings.ClusterPathInfo"));
         }
         else
         {
             PathTextBox.IsEnabled = false;
             OkButton.IsEnabled = false;
-            SetInfoBox(false, config.Message ?? "Dieser Host ist kein Cluster-Knoten. ConfigStoreRootPath ist nur für Hyper-V-Failovercluster verfügbar.");
+            SetInfoBox(false, config.Message ?? L("Settings.NotCluster"));
         }
     }
 
@@ -112,27 +115,26 @@ public partial class ClusterConfigDialog : Window
         var newPath = PathTextBox.Text.Trim();
         if (string.IsNullOrEmpty(newPath))
         {
-            MessageBox.Show(this, "Bitte einen Pfad eingeben.", "Hinweis", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, L("Settings.EnterPath"), L("Dialog.Information"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         if (newPath.Length > 1024 || newPath.Any(char.IsControl) || !System.IO.Path.IsPathFullyQualified(newPath))
         {
-            MessageBox.Show(this, "Bitte einen vollständig qualifizierten Windows-Pfad angeben, z. B. C:\\ClusterStorage\\Volume1\\Hyper-V.",
-                "Ungültiger Pfad", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, L("Settings.InvalidPath"), L("Settings.InvalidPathTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         if (string.Equals(newPath.TrimEnd('\\'), _currentConfigStoreRootPath?.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
         {
-            MessageBox.Show(this, "Der angegebene Pfad ist bereits konfiguriert.", "Keine Änderung",
+            MessageBox.Show(this, L("Settings.PathUnchanged"), L("Settings.NoChange"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         var confirmation = MessageBox.Show(this,
-            $"ConfigStoreRootPath auf '{_targetName}' wirklich ändern?\n\nNeuer Pfad:\n{newPath}\n\nDiese Änderung betrifft den gesamten Cluster.",
-            "Clusterweite Änderung bestätigen", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+            L("Settings.PathConfirm", _targetName, newPath),
+            L("Settings.PathConfirmTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
         if (confirmation != MessageBoxResult.Yes)
         {
             return;
@@ -145,11 +147,11 @@ public partial class ClusterConfigDialog : Window
             _currentConfigStoreRootPath = newPath;
             CurrentPathTextBlock.Text = newPath;
             CurrentPathTextBlock.Foreground = SystemColors.WindowTextBrush;
-            MessageBox.Show(this, $"ConfigStoreRootPath wurde erfolgreich auf\n\n{newPath}\n\ngesetzt.", "Erfolg", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, L("Settings.PathSuccess", newPath), L("Settings.Success"), MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Fehler beim Setzen des Pfads:\n\n{ex.Message}", "Fehler", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, L("Settings.PathFailed", ex.Message), L("Settings.Error"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -234,12 +236,12 @@ public partial class ClusterConfigDialog : Window
         try
         {
             _emailService.SaveConfig(ReadControls());
-            MessageBox.Show(this, "Einstellungen wurden gespeichert. Das SMTP-Kennwort ist benutzergebunden verschlüsselt.", "Gespeichert",
+            MessageBox.Show(this, L("Settings.Saved"), L("Settings.SavedTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         {
-            MessageBox.Show(this, $"Die Einstellungen konnten nicht sicher gespeichert werden:\n\n{ex.Message}", "Fehler",
+            MessageBox.Show(this, L("Settings.SaveFailed", ex.Message), L("Settings.Error"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -250,26 +252,22 @@ public partial class ClusterConfigDialog : Window
 
         if (string.IsNullOrWhiteSpace(config.SmtpHost))
         {
-            MessageBox.Show(this, "Bitte einen SMTP-Server angeben (Reiter 'SMTP-Server').",
-                "Hinweis", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, L("Settings.EnterSmtp"), L("Dialog.Information"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (string.IsNullOrWhiteSpace(config.SenderAddress))
         {
-            MessageBox.Show(this, "Bitte eine Absender-Adresse angeben (Reiter 'E-Mail-Inhalt').",
-                "Hinweis", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, L("Settings.EnterSender"), L("Dialog.Information"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (config.RecipientAddresses.Count == 0)
         {
-            MessageBox.Show(this, "Bitte mindestens eine Empfänger-Adresse angeben (Reiter 'E-Mail-Inhalt').",
-                "Hinweis", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, L("Settings.EnterRecipient"), L("Dialog.Information"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (string.IsNullOrWhiteSpace(config.TargetName))
         {
-            MessageBox.Show(this, "Bitte einen Ziel-Host/Cluster angeben (Reiter 'Aufgabenplanung').",
-                "Hinweis", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, L("Settings.EnterTargetTab"), L("Dialog.Information"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -277,12 +275,12 @@ public partial class ClusterConfigDialog : Window
         try
         {
             var (success, message) = await _emailService.SendReportNowAsync(config, CancellationToken.None);
-            MessageBox.Show(this, message, success ? "Erfolg" : "Fehler", MessageBoxButton.OK,
+            MessageBox.Show(this, message, success ? L("Settings.Success") : L("Settings.Error"), MessageBoxButton.OK,
                 success ? MessageBoxImage.Information : MessageBoxImage.Error);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Der Versand ist fehlgeschlagen:\n\n{ex.Message}", "Fehler",
+            MessageBox.Show(this, L("Settings.SendFailed", ex.Message), L("Settings.Error"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { SetBusy(false); }
@@ -294,14 +292,13 @@ public partial class ClusterConfigDialog : Window
 
         if (string.IsNullOrWhiteSpace(config.TargetName))
         {
-            MessageBox.Show(this, "Bitte einen Ziel-Host/Cluster angeben.", "Hinweis",
+            MessageBox.Show(this, L("Settings.EnterTargetShort"), L("Dialog.Information"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(config.ScheduleTime, @"^\d{1,2}:\d{2}$"))
         {
-            MessageBox.Show(this, "Bitte eine gültige Uhrzeit im Format HH:mm angeben (z.B. 08:00).",
-                "Hinweis", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, L("Settings.InvalidTime"), L("Dialog.Information"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -309,13 +306,13 @@ public partial class ClusterConfigDialog : Window
         try
         {
             var (success, message) = await _emailService.RegisterScheduledTaskAsync(config, CancellationToken.None);
-            MessageBox.Show(this, message, success ? "Aufgabe registriert" : "Fehler", MessageBoxButton.OK,
+            MessageBox.Show(this, message, success ? L("Settings.TaskRegistered") : L("Settings.Error"), MessageBoxButton.OK,
                 success ? MessageBoxImage.Information : MessageBoxImage.Error);
             if (success) await RefreshTaskStatusAsync(config.TaskName);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Die Aufgabe konnte nicht registriert werden:\n\n{ex.Message}", "Fehler",
+            MessageBox.Show(this, L("Settings.TaskRegisterFailed", ex.Message), L("Settings.Error"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { SetBusy(false); }
@@ -328,13 +325,13 @@ public partial class ClusterConfigDialog : Window
         try
         {
             var (success, message) = await _emailService.UnregisterScheduledTaskAsync(config.TaskName, CancellationToken.None);
-            MessageBox.Show(this, message, success ? "Aufgabe entfernt" : "Fehler", MessageBoxButton.OK,
+            MessageBox.Show(this, message, success ? L("Settings.TaskRemoved") : L("Settings.Error"), MessageBoxButton.OK,
                 success ? MessageBoxImage.Information : MessageBoxImage.Error);
             if (success) await RefreshTaskStatusAsync(config.TaskName);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Die Aufgabe konnte nicht entfernt werden:\n\n{ex.Message}", "Fehler",
+            MessageBox.Show(this, L("Settings.TaskRemoveFailed", ex.Message), L("Settings.Error"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { SetBusy(false); }
@@ -347,33 +344,33 @@ public partial class ClusterConfigDialog : Window
 
     private async Task RefreshTaskStatusAsync(string taskName)
     {
-        SetStatusBox(null, "Status wird abgerufen...");
+        SetStatusBox(null, L("Settings.StatusLoading"));
         try
         {
             var status = await _emailService.GetTaskStatusAsync(taskName, CancellationToken.None);
 
             if (status is null)
             {
-                SetStatusBox(false, "Status konnte nicht abgerufen werden.");
+                SetStatusBox(false, L("Settings.StatusUnavailable"));
                 return;
             }
             if (!status.TaskExists)
             {
-                SetStatusBox(false, "Keine Aufgabe registriert.");
+                SetStatusBox(false, L("Settings.NoTask"));
                 return;
             }
 
             var sb = new StringBuilder();
-            sb.Append($"Status: {status.State}");
-            if (status.NextRunTime is not null) sb.Append($"\nNächste Ausführung: {status.NextRunTime}");
-            if (status.LastRunTime is not null) sb.Append($"\nLetzte Ausführung: {status.LastRunTime}");
-            if (status.LastRunResult is not null) sb.Append($"\nLetztes Ergebnis (HRESULT): {status.LastRunResult}");
+            sb.Append(L("Settings.StatusState", status.State));
+            if (status.NextRunTime is not null) sb.Append($"\n{L("Settings.NextRun", status.NextRunTime)}");
+            if (status.LastRunTime is not null) sb.Append($"\n{L("Settings.LastRun", status.LastRunTime)}");
+            if (status.LastRunResult is not null) sb.Append($"\n{L("Settings.LastResult", status.LastRunResult)}");
 
             SetStatusBox(true, sb.ToString());
         }
         catch (Exception ex)
         {
-            SetStatusBox(false, $"Fehler beim Abrufen des Status: {ex.Message}");
+            SetStatusBox(false, L("Settings.StatusFailed", ex.Message));
         }
     }
 

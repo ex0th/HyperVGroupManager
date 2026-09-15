@@ -6,7 +6,7 @@ publish/
 # User-spezifische IDE-Dateien
 *.user
 *.suo
-.vs/
+/.vs/
 *.rsuser
 
 # NuGet

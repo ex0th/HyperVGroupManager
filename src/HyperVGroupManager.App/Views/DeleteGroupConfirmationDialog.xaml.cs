@@ -1,4 +1,5 @@
 using System.Windows;
+using HyperVGroupManager.App.Localization;
 
 namespace HyperVGroupManager.App.Views;
 
@@ -19,7 +20,7 @@ public partial class DeleteGroupConfirmationDialog : Window
             BlockedGroupNameText.Text = groupName;
             MemberCountText.Text = memberCount.ToString();
             ConfirmButton.Visibility = Visibility.Collapsed;
-            CloseButton.Content = "Schließen";
+            CloseButton.Content = LocalizationService.Instance.Get("Common.Close");
         }
         else
         {
