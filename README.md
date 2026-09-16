@@ -20,6 +20,21 @@ dotnet test HyperVGroupManager.sln
 dotnet run --project src\HyperVGroupManager.App
 ```
 
+## Automated GitHub releases
+
+Releases are built on GitHub from version tags, so no local GitHub CLI installation is required.
+After committing and pushing all changes, make sure `Version`, `AssemblyVersion`, and `FileVersion`
+in `src/HyperVGroupManager.App/HyperVGroupManager.App.csproj` are correct and run:
+
+```powershell
+.\scripts\New-Release.ps1 -Version 0.4.1
+```
+
+The script requires a clean working tree, verifies that the current commit is already present on
+the remote branch, runs the tests, and pushes the matching `v0.4.1` tag. The release workflow then
+publishes a portable Windows ZIP and its SHA-256 checksum to GitHub Releases. Release notes are
+generated automatically from the commits since the previous release.
+
 For more information, see the [usage guide](docs/usage.md),
 [architecture documentation](docs/architecture.md), and
 [PowerShell JSON contract](docs/powershell-json-contract.md).
