@@ -76,6 +76,10 @@ Daneben kann die Darstellung zwischen **System**, **Dunkel** und **Hell** umgesc
 `System` folgt der Windows-Einstellung. Die Auswahl wird sofort auf alle Fenster angewendet und in
 `%LocalAppData%\HyperVGroupManager\ui-theme.txt` gespeichert.
 
+Während die Anwendung läuft, ist das neue Programmsymbol auch im Windows-Infobereich verfügbar.
+Ein Doppelklick oder **Öffnen** im Kontextmenü stellt das Hauptfenster wieder her. **Beenden**
+schließt die Anwendung; bei ausstehenden Änderungen bleibt die Sicherheitsabfrage aktiv.
+
 Ein Wechsel zu einem anderen Ziel ist mit offenen Änderungen blockiert. Nach Timeout, Abbruch oder
 einer nicht eindeutig zuordenbaren Backend-Antwort sperrt die Anwendung weitere Schreibvorgänge,
 bis **Aktualisieren** den tatsächlichen Zustand erfolgreich neu geladen hat.

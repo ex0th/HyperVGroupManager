@@ -9,6 +9,10 @@
                 <ResourceDictionary Source="Themes/Controls.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
+            <Style TargetType="{x:Type Window}">
+                <Setter Property="Icon" Value="pack://application:,,,/Assets/app-icon.ico" />
+            </Style>
+
             <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
             <converters:InverseBooleanConverter x:Key="InverseBooleanConverter" />
             <converters:ChangeTypeToGermanConverter x:Key="ChangeTypeToGermanConverter" />

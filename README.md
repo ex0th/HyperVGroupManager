@@ -68,6 +68,11 @@ For more information, see the [usage guide](docs/usage.md),
 * Native Fluent title-bar and control updates without restarting the application
 * Persistent per-user theme preference without modifying the portable application directory
 
+## What's new in 0.4.1
+
+* Refreshed application branding across the executable, windows, taskbar, and notification area
+* Tray shortcut for restoring or closing the application
+
 ## MVP scope
 
 Included: native `VMCollectionType` groups on standalone hosts and clusters, multiple group

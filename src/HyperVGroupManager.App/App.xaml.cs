@@ -32,6 +32,7 @@ namespace HyperVGroupManager.App
 
             var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
             mainWindow.Show();
+            _serviceProvider.GetRequiredService<TrayIconService>().Initialize(mainWindow);
         }
 
         private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
@@ -99,6 +100,7 @@ namespace HyperVGroupManager.App
             services.AddSingleton<EmailReportService>();
             services.AddSingleton<MainViewModel>();
             services.AddSingleton<MainWindow>();
+            services.AddSingleton<TrayIconService>();
         }
     }
 }

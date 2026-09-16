@@ -50,7 +50,9 @@
                     <TextBlock Text="{loc:Loc Help.LanguageHeading}" Style="{StaticResource SectionTitleStyle}" />
                     <TextBlock Text="{loc:Loc Help.LanguageText}" TextWrapping="Wrap" Margin="0,8,0,22" LineHeight="22" />
                     <TextBlock Text="{loc:Loc Help.ThemeHeading}" Style="{StaticResource SectionTitleStyle}" />
-                    <TextBlock Text="{loc:Loc Help.ThemeText}" TextWrapping="Wrap" Margin="0,8,0,0" LineHeight="22" />
+                    <TextBlock Text="{loc:Loc Help.ThemeText}" TextWrapping="Wrap" Margin="0,8,0,22" LineHeight="22" />
+                    <TextBlock Text="{loc:Loc Help.TrayHeading}" Style="{StaticResource SectionTitleStyle}" />
+                    <TextBlock Text="{loc:Loc Help.TrayText}" TextWrapping="Wrap" Margin="0,8,0,0" LineHeight="22" />
                 </StackPanel></ScrollViewer>
             </TabItem>
         </TabControl>
