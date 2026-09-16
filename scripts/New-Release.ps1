@@ -188,7 +188,40 @@ function Wait-GitHubRelease {
 
             if ($run.status -eq 'completed' -and $run.conclusion -ne 'success')
             {
-                throw "GitHub release workflow finished with '$($run.conclusion)': $($run.html_url)"
+                $failureDetails = @()
+                try
+                {
+                    $jobsResponse = Invoke-GitHubApi -Uri $run.jobs_url
+                    foreach ($job in @($jobsResponse.jobs | Where-Object { $_.conclusion -ne 'success' }))
+                    {
+                        $failedSteps = @($job.steps |
+                            Where-Object { $_.conclusion -eq 'failure' } |
+                            ForEach-Object { $_.name })
+                        if ($failedSteps.Count -gt 0)
+                        {
+                            $failureDetails += "$($job.name): $($failedSteps -join ', ')"
+                        }
+                        else
+                        {
+                            $failureDetails += "$($job.name): $($job.conclusion)"
+                        }
+                    }
+                }
+                catch
+                {
+                    $failureDetails += "Job details unavailable: $($_.Exception.Message)"
+                }
+
+                $details = if ($failureDetails.Count -gt 0)
+                {
+                    "`nFailed job/step: $($failureDetails -join '; ')"
+                }
+                else
+                {
+                    ''
+                }
+
+                throw "GitHub release workflow finished with '$($run.conclusion)'.$details`n$($run.html_url)"
             }
 
             if ($run.status -eq 'completed' -and $run.conclusion -eq 'success')

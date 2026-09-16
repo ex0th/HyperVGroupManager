@@ -66,17 +66,17 @@ WiX 5 no longer receives upstream support; reassess this trade-off before a prod
 
 ## Release signing
 
-GitHub releases are fail-closed: the workflow signs and verifies the portable executable before it
-is packaged and then signs and verifies the MSI. An unsigned release is not published. Configure
-these repository secrets before creating a release:
+GitHub releases use Microsoft Azure Artifact Signing with a Public Trust certificate profile and
+keyless OpenID Connect authentication. No certificate or long-lived Azure credential is stored in
+GitHub. The workflow signs and verifies the portable executable before packaging it, embeds that
+signed executable in the MSI, and then signs and verifies the MSI. It fails closed if signing is not
+configured or either signature is invalid.
 
-* `CODE_SIGNING_CERTIFICATE_BASE64`: Base64-encoded PFX containing the Authenticode certificate and
-  private key
-* `CODE_SIGNING_CERTIFICATE_PASSWORD`: password of that PFX, if it has one
+The one-time Azure, Entra ID, RBAC, GitHub environment, secret, and variable setup is documented in
+[Artifact Signing setup](docs/artifact-signing.md).
 
-The temporary PFX is written only to the ephemeral GitHub runner and removed in an `always()` step.
-Signing uses SHA-256 and an RFC 3161 timestamp. For local signing, use
-`scripts\Sign-Release.ps1` with either a PFX path or a certificate-store thumbprint.
+For local development only, `scripts\Sign-Release.ps1` and `scripts\Build-Installer.ps1` continue
+to support a PFX file or a certificate-store thumbprint:
 
 ```powershell
 $env:CODE_SIGNING_CERTIFICATE_PASSWORD = '<PFX password>'

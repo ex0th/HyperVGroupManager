@@ -104,20 +104,17 @@ vor einem produktiven Rollout erneut geprüft werden.
 
 ## Release-Dateien signieren
 
-Der GitHub-Release-Workflow veröffentlicht keine unsignierten Builds. Er signiert zuerst die
-portable EXE, baut das MSI mit dieser signierten EXE und signiert danach auch das MSI. Beide
-Signaturen werden vor dem Verpacken mit SignTool geprüft.
+Der GitHub-Release-Workflow verwendet Microsoft Azure Artifact Signing mit einem Public-Trust-
+Zertifikatprofil. GitHub meldet sich über OpenID Connect (OIDC) bei Azure an. Dadurch werden weder
+ein PFX noch ein privater Schlüssel oder ein dauerhaftes Azure-Client-Secret in GitHub gespeichert.
 
-In den GitHub-Repository-Secrets müssen hinterlegt sein:
+Der Workflow signiert zuerst die portable EXE, baut das MSI mit dieser signierten EXE und signiert
+danach auch das MSI. Beide Signaturen werden vor dem Verpacken geprüft. Bei fehlender Konfiguration
+oder ungültiger Signatur wird kein Release veröffentlicht. Die einmalige Einrichtung ist unter
+[Artifact Signing einrichten](artifact-signing.md) beschrieben.
 
-* `CODE_SIGNING_CERTIFICATE_BASE64`: Base64-kodierte PFX-Datei mit Authenticode-Zertifikat und
-  privatem Schlüssel
-* `CODE_SIGNING_CERTIFICATE_PASSWORD`: Kennwort der PFX-Datei, sofern vorhanden
-
-Die temporäre PFX-Datei existiert nur auf dem kurzlebigen GitHub-Runner und wird durch einen
-`always()`-Schritt entfernt. Ohne das Zertifikat bricht der Workflow ab. Lokal können Dateien über
-`scripts\Sign-Release.ps1` entweder mit einer PFX-Datei oder dem Thumbprint eines Zertifikats im
-Windows-Zertifikatsspeicher signiert werden.
+Für lokale Entwicklung und interne Testzertifikate bleiben `scripts\Sign-Release.ps1` und die
+PFX-/Zertifikatsspeicher-Parameter von `scripts\Build-Installer.ps1` verfügbar.
 
 Ein lokaler Build kann die portable EXE vor dem Verpacken und anschließend das MSI signieren:
 
