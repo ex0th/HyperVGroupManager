@@ -69,6 +69,7 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<VmGroupInfo> Groups { get; } = new();
     public ObservableCollection<VmGroupInfo> FilteredGroups { get; } = new();
     public ObservableCollection<VirtualMachineInfo> VirtualMachines { get; } = new();
+    public ObservableCollection<VirtualMachineRowViewModel> VirtualMachineRows { get; } = new();
     public ObservableCollection<VmGroupMembershipChange> PendingChanges { get; } = new();
     public ObservableCollection<string> StatusMessages { get; } = new();
     public ObservableCollection<VirtualMachineInfo> SelectedVirtualMachines { get; } = new();
@@ -84,6 +85,14 @@ public partial class MainViewModel : ObservableObject
     public bool HasPendingChanges => PendingChanges.Count > 0;
     public bool IsStateUncertain => _requiresRefreshBeforeApply;
     public bool CanModifyPlan => IsConnected && !IsBusy && !_requiresRefreshBeforeApply;
+    public bool CanUseConnectedTarget => IsConnected && !IsBusy;
+    public bool CanApplyChanges => CanUseConnectedTarget && HasPendingChanges && !_requiresRefreshBeforeApply;
+    public bool CanModifySelectedGroup => CanModifyPlan && SelectedGroup is not null;
+    public bool CanChangeMembership => CanModifySelectedGroup && SelectedVirtualMachines.Count > 0;
+    public bool IsConnectionError => _connectionStatusKey is "Connection.Error" or "Connection.VerifyState";
+    public string LastRefreshedAtDisplay => LastRefreshedAt?.ToString("HH:mm:ss") ?? "—";
+    public string EmptyGroupsMessage => L(IsConnected ? "Groups.EmptyConnected" : "Groups.EmptyDisconnected");
+    public string EmptyVmsMessage => L(IsConnected ? "Vms.EmptyConnected" : "Vms.EmptyDisconnected");
 
     private bool CanInteract => !IsBusy;
 
@@ -103,6 +112,8 @@ public partial class MainViewModel : ObservableObject
         if (e.PropertyName is "Item[]" or nameof(LocalizationService.CurrentLanguageCode))
         {
             OnPropertyChanged(nameof(ConnectionStatus));
+            OnPropertyChanged(nameof(EmptyGroupsMessage));
+            OnPropertyChanged(nameof(EmptyVmsMessage));
             RefreshPendingChanges();
         }
     }
@@ -116,6 +127,7 @@ public partial class MainViewModel : ObservableObject
     {
         _connectionStatusKey = key;
         OnPropertyChanged(nameof(ConnectionStatus));
+        OnPropertyChanged(nameof(IsConnectionError));
     }
 
     partial void OnIsBusyChanged(bool value)
@@ -126,12 +138,25 @@ public partial class MainViewModel : ObservableObject
         ExportConfigurationCommand.NotifyCanExecuteChanged();
         NotifyPlanningCommandStateChanged();
         DiscardChangesCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanUseConnectedTarget));
+        OnPropertyChanged(nameof(CanApplyChanges));
+        OnPropertyChanged(nameof(CanModifySelectedGroup));
+        OnPropertyChanged(nameof(CanChangeMembership));
     }
 
     partial void OnIsConnectedChanged(bool value)
     {
+        RefreshCommand.NotifyCanExecuteChanged();
+        ExportConfigurationCommand.NotifyCanExecuteChanged();
+        ApplyChangesCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanUseConnectedTarget));
+        OnPropertyChanged(nameof(CanApplyChanges));
+        OnPropertyChanged(nameof(EmptyGroupsMessage));
+        OnPropertyChanged(nameof(EmptyVmsMessage));
         NotifyPlanningCommandStateChanged();
     }
+
+    partial void OnLastRefreshedAtChanged(DateTime? value) => OnPropertyChanged(nameof(LastRefreshedAtDisplay));
 
     partial void OnSearchTextChanged(string value) => ApplyVmFilter();
     partial void OnGroupSearchTextChanged(string value) => ApplyGroupFilter();
@@ -139,6 +164,12 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnSelectedGroupChanged(VmGroupInfo? value)
     {
+        RenameGroupCommand.NotifyCanExecuteChanged();
+        DeleteGroupCommand.NotifyCanExecuteChanged();
+        AddSelectedVmsToGroupCommand.NotifyCanExecuteChanged();
+        RemoveSelectedVmsFromGroupCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanModifySelectedGroup));
+        OnPropertyChanged(nameof(CanChangeMembership));
         if (SelectedFilterMode == VmFilterMode.SelectedGroup)
         {
             ApplyVmFilter();
@@ -209,7 +240,7 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanInteract))]
+    [RelayCommand(CanExecute = nameof(CanUseConnectedTarget))]
     private async Task RefreshAsync(CancellationToken cancellationToken)
     {
         if (!TryGetConnectedTarget(out var target))
@@ -295,7 +326,7 @@ public partial class MainViewModel : ObservableObject
         AddStatusMessage(L("Status.GroupPlanned", trimmedName));
     }
 
-    [RelayCommand(CanExecute = nameof(CanModifyPlan))]
+    [RelayCommand(CanExecute = nameof(CanModifySelectedGroup))]
     private void RenameGroup(string? newName)
     {
         if (SelectedGroup is null)
@@ -345,7 +376,7 @@ public partial class MainViewModel : ObservableObject
         AddStatusMessage(L("Status.RenamePlanned", group.Name, trimmedName));
     }
 
-    [RelayCommand(CanExecute = nameof(CanModifyPlan))]
+    [RelayCommand(CanExecute = nameof(CanModifySelectedGroup))]
     private void DeleteGroup()
     {
         if (SelectedGroup is null)
@@ -374,7 +405,7 @@ public partial class MainViewModel : ObservableObject
         AddStatusMessage(L("Status.DeletePlanned", group.Name));
     }
 
-    [RelayCommand(CanExecute = nameof(CanModifyPlan))]
+    [RelayCommand(CanExecute = nameof(CanChangeMembership))]
     private void AddSelectedVmsToGroup()
     {
         if (!TryGetMembershipSelection(out var group, out var selectedVms))
@@ -416,7 +447,7 @@ public partial class MainViewModel : ObservableObject
         AddStatusMessage(BuildMembershipStatus(added, skipped, L("Operation.AddedTo", group.Name)));
     }
 
-    [RelayCommand(CanExecute = nameof(CanModifyPlan))]
+    [RelayCommand(CanExecute = nameof(CanChangeMembership))]
     private void RemoveSelectedVmsFromGroup()
     {
         if (!TryGetMembershipSelection(out var group, out var selectedVms))
@@ -458,7 +489,7 @@ public partial class MainViewModel : ObservableObject
         AddStatusMessage(BuildMembershipStatus(removed, skipped, L("Operation.RemovedFrom", group.Name)));
     }
 
-    [RelayCommand(CanExecute = nameof(CanInteract))]
+    [RelayCommand(CanExecute = nameof(CanApplyChanges))]
     private async Task ApplyChangesAsync(CancellationToken cancellationToken)
     {
         if (!TryGetConnectedTarget(out var target))
@@ -552,7 +583,7 @@ public partial class MainViewModel : ObservableObject
         AddStatusMessage(L("Status.Discarded"));
     }
 
-    [RelayCommand(CanExecute = nameof(CanInteract))]
+    [RelayCommand(CanExecute = nameof(CanUseConnectedTarget))]
     private async Task ExportConfigurationAsync(string? filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -641,16 +672,58 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(PendingChangeCount));
         OnPropertyChanged(nameof(HasPendingChanges));
         DiscardChangesCommand.NotifyCanExecuteChanged();
+        ApplyChangesCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanApplyChanges));
     }
 
     private void ApplyVmFilter()
     {
-        var filtered = VirtualMachineFilter.Apply(_allVirtualMachines, SelectedFilterMode, SearchText, SelectedGroup);
+        var filtered = VirtualMachineFilter.Apply(_allVirtualMachines, SelectedFilterMode, SearchText, SelectedGroup).ToList();
         VirtualMachines.Clear();
+        VirtualMachineRows.Clear();
         foreach (var vm in filtered)
         {
             VirtualMachines.Add(vm);
+            VirtualMachineRows.Add(BuildVirtualMachineRow(vm));
         }
+    }
+
+    private VirtualMachineRowViewModel BuildVirtualMachineRow(VirtualMachineInfo vm)
+    {
+        var vmChanges = _changeQueue.Changes.Where(change => change.VmId == vm.Id).ToArray();
+        var additions = vmChanges
+            .Where(change => change.ChangeType == VmGroupChangeType.AddMembership)
+            .Select(change => change.GroupName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var removals = vmChanges
+            .Where(change => change.ChangeType == VmGroupChangeType.RemoveMembership)
+            .Select(change => change.GroupName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var renames = _changeQueue.Changes
+            .Where(change => change.ChangeType == VmGroupChangeType.RenameGroup)
+            .Select(change => new
+            {
+                Change = change,
+                OriginalGroup = _serverGroups.FirstOrDefault(group => group.Id == change.GroupId),
+            })
+            .Where(item => item.OriginalGroup?.MemberVmIds.Contains(vm.Id) == true)
+            .Select(item => $"{item.OriginalGroup!.Name} → {item.Change.GroupName}")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new VirtualMachineRowViewModel(vm, additions, removals, renames);
+    }
+
+    public void NotifyVmSelectionChanged()
+    {
+        AddSelectedVmsToGroupCommand.NotifyCanExecuteChanged();
+        RemoveSelectedVmsFromGroupCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanChangeMembership));
     }
 
     private void ApplyGroupFilter()
@@ -751,6 +824,10 @@ public partial class MainViewModel : ObservableObject
         AddSelectedVmsToGroupCommand.NotifyCanExecuteChanged();
         RemoveSelectedVmsFromGroupCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanModifyPlan));
+        OnPropertyChanged(nameof(CanModifySelectedGroup));
+        OnPropertyChanged(nameof(CanChangeMembership));
+        OnPropertyChanged(nameof(CanApplyChanges));
+        ApplyChangesCommand.NotifyCanExecuteChanged();
     }
 
     private static string BuildMembershipStatus(int changed, int skipped, string operation)

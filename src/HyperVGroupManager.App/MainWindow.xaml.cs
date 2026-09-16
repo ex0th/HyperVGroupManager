@@ -8,7 +8,6 @@ using HyperVGroupManager.App.Services;
 using HyperVGroupManager.App.ViewModels;
 using HyperVGroupManager.App.Views;
 using HyperVGroupManager.Core.Interfaces;
-using HyperVGroupManager.Core.Models;
 using Microsoft.Win32;
 
 namespace HyperVGroupManager.App
@@ -65,10 +64,12 @@ namespace HyperVGroupManager.App
         private void VirtualMachinesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             _viewModel.SelectedVirtualMachines.Clear();
-            foreach (var item in VirtualMachinesGrid.SelectedItems.Cast<VirtualMachineInfo>())
+            foreach (var item in VirtualMachinesGrid.SelectedItems.Cast<VirtualMachineRowViewModel>())
             {
-                _viewModel.SelectedVirtualMachines.Add(item);
+                _viewModel.SelectedVirtualMachines.Add(item.Source);
             }
+
+            _viewModel.NotifyVmSelectionChanged();
         }
 
         private void NewGroupButton_Click(object sender, RoutedEventArgs e)

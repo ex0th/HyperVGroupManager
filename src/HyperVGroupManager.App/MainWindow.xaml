@@ -25,12 +25,15 @@
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <StackPanel Margin="0,0,10,0">
                     <TextBlock Text="{loc:Loc Main.TargetLabel}" Style="{StaticResource CaptionStyle}" Margin="2,0,0,4" />
-                    <TextBox Text="{Binding TargetName, UpdateSourceTrigger=PropertyChanged}" Width="230" ToolTip="{loc:Loc Main.TargetTooltip}" />
+                    <TextBox Text="{Binding TargetName, UpdateSourceTrigger=PropertyChanged}" Width="230"
+                             Tag="{loc:Loc Main.TargetPlaceholder}" ToolTip="{loc:Loc Main.TargetTooltip}" />
                 </StackPanel>
                 <Button Content="{loc:Loc Common.Connect}" Command="{Binding ConnectCommand}" Style="{StaticResource AccentButtonStyle}" Margin="0,20,8,0" />
                 <Button Content="{loc:Loc Common.Refresh}" Command="{Binding RefreshCommand}" Margin="0,20,8,0" ToolTip="{loc:Loc Main.RefreshTooltip}" />
-                <Button Content="{loc:Loc Common.Export}" Margin="0,20,8,0" Click="ExportConfigurationButton_Click" ToolTip="{loc:Loc Main.ExportTooltip}" />
-                <Button Content="{loc:Loc Common.Settings}" Margin="0,20,8,0" Click="ClusterConfigButton_Click" />
+                <Button Content="{loc:Loc Common.Export}" Margin="0,20,8,0" Click="ExportConfigurationButton_Click"
+                        IsEnabled="{Binding CanUseConnectedTarget}" ToolTip="{loc:Loc Main.ExportTooltip}" />
+                <Button Content="{loc:Loc Common.Settings}" Margin="0,20,8,0" Click="ClusterConfigButton_Click"
+                        IsEnabled="{Binding CanUseConnectedTarget}" />
                 <Button Content="{loc:Loc Common.Help}" Margin="0,20,8,0" Click="HelpButton_Click" ToolTip="{loc:Loc Main.HelpTooltip}" />
                 <ComboBox Margin="0,20,0,0" Width="104" ToolTip="{loc:Loc Main.LanguageTooltip}"
                           ItemsSource="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=SupportedLanguages}"
@@ -77,7 +80,8 @@
                         <StackPanel><TextBlock Text="{loc:Loc Groups.Title}" Style="{StaticResource SectionTitleStyle}" /><TextBlock Text="{loc:Loc Groups.Subtitle}" Style="{StaticResource CaptionStyle}" Margin="0,2,0,0" /></StackPanel>
                         <Button Grid.Column="1" Content="{loc:Loc Groups.New}" Click="NewGroupButton_Click" IsEnabled="{Binding CanModifyPlan}" />
                     </Grid>
-                    <TextBox Grid.Row="1" Margin="16,0,16,10" Text="{Binding GroupSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{loc:Loc Groups.SearchTooltip}" />
+                    <TextBox Grid.Row="1" Margin="16,0,16,10" Text="{Binding GroupSearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Tag="{loc:Loc Groups.SearchPlaceholder}" ToolTip="{loc:Loc Groups.SearchTooltip}" />
                     <ListBox Grid.Row="2" ItemsSource="{Binding FilteredGroups}" SelectedItem="{Binding SelectedGroup}" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate><DataTemplate>
                             <Grid Margin="6,5" MinHeight="32">
@@ -88,10 +92,24 @@
                             </Grid>
                         </DataTemplate></ListBox.ItemTemplate>
                     </ListBox>
+                    <TextBlock Grid.Row="2" Text="{Binding EmptyGroupsMessage}"
+                               Margin="24" TextAlignment="Center" TextWrapping="Wrap" VerticalAlignment="Center"
+                               IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource CaptionStyle}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FilteredGroups.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <Grid Grid.Row="3" Margin="16,10,16,14">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <Button Content="{loc:Loc Common.Rename}" Click="RenameGroupButton_Click" IsEnabled="{Binding CanModifyPlan}" />
-                        <Button Grid.Column="2" Content="{loc:Loc Common.Delete}" Click="DeleteGroupButton_Click" IsEnabled="{Binding CanModifyPlan}" />
+                        <Button Content="{loc:Loc Common.Rename}" Click="RenameGroupButton_Click" IsEnabled="{Binding CanModifySelectedGroup}" />
+                        <Button Grid.Column="2" Content="{loc:Loc Common.Delete}" Click="DeleteGroupButton_Click" IsEnabled="{Binding CanModifySelectedGroup}" />
                     </Grid>
                 </Grid>
             </Border>
@@ -107,7 +125,8 @@
                     </Grid>
                     <Grid Grid.Row="1" Margin="16,0,16,10">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="220" /></Grid.ColumnDefinitions>
-                        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{loc:Loc Vms.SearchTooltip}" />
+                        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag="{loc:Loc Vms.SearchPlaceholder}" ToolTip="{loc:Loc Vms.SearchTooltip}" />
                         <ComboBox Grid.Column="2" SelectedValue="{Binding SelectedFilterMode}" SelectedValuePath="Tag">
                             <ComboBoxItem Content="{loc:Loc Filter.All}" Tag="{x:Static coreServices:VmFilterMode.All}" />
                             <ComboBoxItem Content="{loc:Loc Filter.Untagged}" Tag="{x:Static coreServices:VmFilterMode.WithoutGroup}" />
@@ -116,18 +135,66 @@
                             <ComboBoxItem Content="{loc:Loc Filter.Off}" Tag="{x:Static coreServices:VmFilterMode.Off}" />
                         </ComboBox>
                     </Grid>
-                    <DataGrid x:Name="VirtualMachinesGrid" Grid.Row="2" ItemsSource="{Binding VirtualMachines}" SelectedItem="{Binding SelectedVm}"
+                    <DataGrid x:Name="VirtualMachinesGrid" Grid.Row="2" ItemsSource="{Binding VirtualMachineRows}"
                               AutoGenerateColumns="False" SelectionMode="Extended" SelectionUnit="FullRow" IsReadOnly="True"
                               CanUserAddRows="False" CanUserDeleteRows="False" GridLinesVisibility="Horizontal" HeadersVisibility="Column"
                               BorderThickness="0" Margin="1,0,1,1" SelectionChanged="VirtualMachinesGrid_SelectionChanged">
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsModified}" Value="True">
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                        <Setter Property="BorderThickness" Value="3,0,0,0" />
+                                        <Setter Property="Background" Value="{DynamicResource AccentFillColorTertiaryBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="{loc:Loc Column.Name}" Binding="{Binding Name}" Width="2*" MinWidth="160" />
                             <DataGridTextColumn Header="{loc:Loc Column.Status}" Binding="{Binding State}" Width="110" />
                             <DataGridTextColumn Header="{loc:Loc Column.OwnerNode}" Binding="{Binding OwnerNode}" Width="150" />
-                            <DataGridTextColumn Header="{loc:Loc Column.Groups}" Binding="{Binding GroupNames, Converter={StaticResource StringListJoinConverter}}" Width="3*" MinWidth="220" />
+                            <DataGridTemplateColumn Header="{loc:Loc Column.Groups}" Width="3*" MinWidth="260">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="5,3">
+                                            <TextBlock Text="{Binding GroupNames, Converter={StaticResource StringListJoinConverter}}" />
+                                            <WrapPanel Margin="0,3,0,0">
+                                                <Border Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,2" Margin="0,0,5,0"
+                                                        Visibility="{Binding HasAdditions, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding AddedGroupsDisplay}" Foreground="#48B982" FontSize="11" FontWeight="SemiBold" />
+                                                </Border>
+                                                <Border Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,2" Margin="0,0,5,0"
+                                                        Visibility="{Binding HasRemovals, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding RemovedGroupsDisplay}" Foreground="#E56B66" FontSize="11" FontWeight="SemiBold" />
+                                                </Border>
+                                                <Border Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,2"
+                                                        Visibility="{Binding HasRenames, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding RenamedGroupsDisplay}" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" FontSize="11" FontWeight="SemiBold" />
+                                                </Border>
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="{loc:Loc Column.Count}" Binding="{Binding GroupNames.Count}" Width="80" />
                         </DataGrid.Columns>
                     </DataGrid>
+                    <TextBlock Grid.Row="2" Text="{Binding EmptyVmsMessage}"
+                               Margin="30" TextAlignment="Center" TextWrapping="Wrap" VerticalAlignment="Center"
+                               IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource CaptionStyle}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding VirtualMachineRows.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Grid>
             </Border>
         </Grid>
@@ -143,7 +210,8 @@
                         <TextBlock Text="{loc:Loc Changes.Subtitle}" Style="{StaticResource CaptionStyle}" VerticalAlignment="Center" />
                     </StackPanel>
                     <Button Grid.Column="1" Content="{loc:Loc Changes.Discard}" Command="{Binding DiscardChangesCommand}" />
-                    <Button Grid.Column="3" Content="{loc:Loc Changes.Apply}" Style="{StaticResource AccentButtonStyle}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanConverter}}" Click="ApplyChangesButton_Click" />
+                    <Button Grid.Column="3" Content="{loc:Loc Changes.Apply}" Style="{StaticResource AccentButtonStyle}"
+                            IsEnabled="{Binding CanApplyChanges}" Click="ApplyChangesButton_Click" />
                 </Grid>
                 <DataGrid Grid.Row="1" ItemsSource="{Binding PendingChanges}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" GridLinesVisibility="Horizontal" HeadersVisibility="Column" BorderThickness="0">
                     <DataGrid.Columns>
@@ -153,13 +221,40 @@
                         <DataGridTextColumn Header="{loc:Loc Column.Description}" Binding="{Binding Description}" Width="*" />
                     </DataGrid.Columns>
                 </DataGrid>
+                <TextBlock Grid.Row="1" Text="{loc:Loc Changes.Empty}"
+                           TextAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource CaptionStyle}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding PendingChanges.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </Grid>
         </Border>
 
         <Grid Grid.Row="4">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="●" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" Margin="0,0,7,0" />
+                <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center">
+                    <Ellipse.Style>
+                        <Style TargetType="Ellipse">
+                            <Setter Property="Fill" Value="{DynamicResource TextFillColorDisabledBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                    <Setter Property="Fill" Value="#48B982" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsConnectionError}" Value="True">
+                                    <Setter Property="Fill" Value="#E56B66" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Ellipse.Style>
+                </Ellipse>
                 <TextBlock Text="{Binding ConnectionStatus}" FontWeight="SemiBold" />
                 <TextBlock Text="{loc:Loc Status.Target}" Style="{StaticResource CaptionStyle}" />
                 <TextBlock Text="{Binding ConnectedTargetName}" Style="{StaticResource CaptionStyle}" />
@@ -167,7 +262,7 @@
             <TextBlock Grid.Column="2" Text="{Binding StatusMessages[0]}" Style="{StaticResource CaptionStyle}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
             <StackPanel Grid.Column="3" Orientation="Horizontal">
                 <ProgressBar IsIndeterminate="True" Width="90" Height="4" Margin="0,0,12,0" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
-                <TextBlock Style="{StaticResource CaptionStyle}"><Run Text="{loc:Loc Status.LastRefresh}" /><Run Text="{Binding LastRefreshedAt, StringFormat='{}{0:HH:mm:ss}'}" /></TextBlock>
+                <TextBlock Style="{StaticResource CaptionStyle}"><Run Text="{loc:Loc Status.LastRefresh}" /><Run Text="{Binding LastRefreshedAtDisplay}" /></TextBlock>
             </StackPanel>
         </Grid>
     </Grid>

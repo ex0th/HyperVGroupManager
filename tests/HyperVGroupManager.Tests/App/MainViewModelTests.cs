@@ -337,4 +337,55 @@ public class MainViewModelTests
         Assert.Contains(viewModel.PendingChanges, change => change.ChangeType == VmGroupChangeType.RemoveMembership);
         Assert.Contains(viewModel.PendingChanges, change => change.ChangeType == VmGroupChangeType.DeleteGroup);
     }
+
+    [Fact]
+    public async Task ConnectedActions_RequireConnectionAndApplyRequiresPendingChanges()
+    {
+        var viewModel = CreateViewModel(new FakeHyperVGroupService());
+
+        Assert.False(viewModel.RefreshCommand.CanExecute(null));
+        Assert.False(viewModel.ExportConfigurationCommand.CanExecute("export.json"));
+        Assert.False(viewModel.ApplyChangesCommand.CanExecute(null));
+
+        viewModel.TargetName = "HV01";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.RefreshCommand.CanExecute(null));
+        Assert.True(viewModel.ExportConfigurationCommand.CanExecute("export.json"));
+        Assert.False(viewModel.ApplyChangesCommand.CanExecute(null));
+
+        viewModel.CreateGroupCommand.Execute("VEEAM_New");
+
+        Assert.True(viewModel.ApplyChangesCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task PlannedMembership_IsExposedAsVisualVmDelta()
+    {
+        var vm = new VirtualMachineInfo
+        {
+            Id = Guid.NewGuid(), Name = "VM01", ComputerName = "HV01", OwnerNode = "HV01", State = "Running",
+        };
+        var group = new VmGroupInfo
+        {
+            Id = Guid.NewGuid(), Name = "VEEAM_Daily", GroupType = "VMCollectionType",
+        };
+        var viewModel = CreateViewModel(new FakeHyperVGroupService
+        {
+            VirtualMachines = new List<VirtualMachineInfo> { vm },
+            Groups = new List<VmGroupInfo> { group },
+        });
+        viewModel.TargetName = "HV01";
+        await viewModel.ConnectCommand.ExecuteAsync(null);
+        viewModel.SelectedGroup = viewModel.Groups[0];
+        viewModel.SelectedVirtualMachines.Add(vm);
+        viewModel.NotifyVmSelectionChanged();
+
+        viewModel.AddSelectedVmsToGroupCommand.Execute(null);
+
+        var row = Assert.Single(viewModel.VirtualMachineRows);
+        Assert.True(row.IsModified);
+        Assert.Equal("VEEAM_Daily", Assert.Single(row.AddedGroupNames));
+        Assert.Empty(row.RemovedGroupNames);
+    }
 }
