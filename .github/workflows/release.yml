@@ -10,11 +10,12 @@ permissions:
 
 jobs:
   release:
-    name: Build and publish portable release
+    name: Build portable ZIP and MSI release
     runs-on: windows-latest
 
     env:
       PROJECT_PATH: src\HyperVGroupManager.App\HyperVGroupManager.App.csproj
+      INSTALLER_PROJECT_PATH: installer\HyperVGroupManager.Installer.wixproj
       SOLUTION_PATH: HyperVGroupManager.sln
 
     steps:
@@ -49,6 +50,11 @@ jobs:
           }
 
           $numericVersion = ($version -split '-', 2)[0]
+          $versionParts = @($numericVersion -split '\.' | ForEach-Object { [int]$_ })
+          if ($versionParts[0] -gt 255 -or $versionParts[1] -gt 255 -or $versionParts[2] -gt 65535) {
+            throw "Version '$numericVersion' exceeds Windows Installer limits (255.255.65535)."
+          }
+
           $expectedFileVersion = "$numericVersion.0"
           foreach ($elementName in @('AssemblyVersion', 'FileVersion')) {
             $node = $project.SelectSingleNode("/Project/PropertyGroup/$elementName")
@@ -59,10 +65,21 @@ jobs:
           }
 
           "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSI_PRODUCT_VERSION=$numericVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "RELEASE_FILE_VERSION=$expectedFileVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Restore dependencies
-        run: dotnet restore $env:SOLUTION_PATH
+        shell: pwsh
+        run: |
+          dotnet restore $env:SOLUTION_PATH
+          if ($LASTEXITCODE -ne 0) {
+            throw "Solution restore failed with exit code $LASTEXITCODE."
+          }
+
+          dotnet restore $env:INSTALLER_PROJECT_PATH
+          if ($LASTEXITCODE -ne 0) {
+            throw "Installer restore failed with exit code $LASTEXITCODE."
+          }
 
       - name: Run tests
         run: dotnet test $env:SOLUTION_PATH -c Release --no-restore
@@ -88,7 +105,26 @@ jobs:
 
           "PUBLISH_DIRECTORY=$publishDirectory" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Package release and checksum
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $installerOutput = Join-Path $env:RUNNER_TEMP 'HyperVGroupManager-installer'
+          dotnet build $env:INSTALLER_PROJECT_PATH -c Release --no-restore `
+            "-p:ProductVersion=$env:MSI_PRODUCT_VERSION" `
+            "-p:PublishDir=$env:PUBLISH_DIRECTORY" `
+            "-p:OutputPath=$installerOutput"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Installer build failed with exit code $LASTEXITCODE."
+          }
+
+          $installers = @(Get-ChildItem -LiteralPath $installerOutput -Filter '*.msi' -Recurse -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one MSI output, found $($installers.Count)."
+          }
+
+          "INSTALLER_SOURCE=$($installers[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Package release and checksums
         shell: pwsh
         run: |
           $assetDirectory = Join-Path $env:GITHUB_WORKSPACE 'release-assets'
@@ -98,11 +134,19 @@ jobs:
           $archivePath = Join-Path $assetDirectory $archiveName
           Compress-Archive -Path (Join-Path $env:PUBLISH_DIRECTORY '*') -DestinationPath $archivePath -CompressionLevel Optimal
 
-          $checksum = (Get-FileHash -Algorithm SHA256 -LiteralPath $archivePath).Hash.ToLowerInvariant()
-          $checksumPath = "$archivePath.sha256"
-          "$checksum  $archiveName" | Set-Content -LiteralPath $checksumPath -Encoding ascii
+          $installerName = "HyperVGroupManager-$env:RELEASE_VERSION-win-x64.msi"
+          $installerPath = Join-Path $assetDirectory $installerName
+          Copy-Item -LiteralPath $env:INSTALLER_SOURCE -Destination $installerPath
+
+          $checksumPath = Join-Path $assetDirectory "HyperVGroupManager-$env:RELEASE_VERSION-SHA256SUMS.txt"
+          @($archivePath, $installerPath) | ForEach-Object {
+            $file = Get-Item -LiteralPath $_
+            $checksum = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
+            "$checksum  $($file.Name)"
+          } | Set-Content -LiteralPath $checksumPath -Encoding ascii
 
           "RELEASE_ARCHIVE=$archivePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_INSTALLER=$installerPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "RELEASE_CHECKSUM=$checksumPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Create GitHub release
@@ -114,6 +158,7 @@ jobs:
           $arguments = @(
             'release', 'create', '${{ github.ref_name }}',
             $env:RELEASE_ARCHIVE,
+            $env:RELEASE_INSTALLER,
             $env:RELEASE_CHECKSUM,
             '--verify-tag',
             '--title', "Hyper-V VM Group Manager $env:RELEASE_VERSION",

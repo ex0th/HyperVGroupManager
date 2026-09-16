@@ -3,6 +3,7 @@ bin/
 obj/
 publish/
 release-assets/
+artifacts/
 
 # User-spezifische IDE-Dateien
 *.user

@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Hyper-V VM Group Manager"
+           Manufacturer="Silas Suessmilch"
+           Version="$(var.ProductVersion)"
+           Language="1033"
+           UpgradeCode="EF426970-8BD2-47F8-A150-A3AD4641533B"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <SummaryInformation Description="Manage native Hyper-V VM groups safely"
+                        Manufacturer="Silas Suessmilch" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed."
+                  Schedule="afterInstallInitialize" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="ProductIcon.exe" SourceFile="$(sys.SOURCEFILEDIR)..\icons\app.ico" />
+    <Property Id="ARPPRODUCTICON" Value="ProductIcon.exe" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/ex0th/HyperVGroupManager" />
+    <Property Id="ARPNOREPAIR" Value="0" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT"
+              Value="Hyper-V VM Group Manager was installed successfully." />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="HyperVGroupManager" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Hyper-V VM Group Manager" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Component Id="ApplicationSettingsComponent"
+               Directory="INSTALLFOLDER"
+               Guid="D678E486-9309-47F7-A4D3-F2ACD755602D"
+               Bitness="always64"
+               NeverOverwrite="yes">
+      <File Id="ApplicationSettingsFile"
+            Source="$(var.PublishDir)\appsettings.json"
+            KeyPath="yes" />
+    </Component>
+
+    <Component Id="ApplicationExecutableComponent"
+               Directory="INSTALLFOLDER"
+               Guid="84A7BCBE-988A-41D6-94FF-39DB3171C3CC"
+               Bitness="always64">
+      <File Id="ApplicationExecutableFile"
+            Source="$(var.PublishDir)\HyperVGroupManager.App.exe"
+            KeyPath="yes">
+        <Shortcut Id="StartMenuShortcut"
+                  Directory="ApplicationProgramsFolder"
+                  Name="Hyper-V VM Group Manager"
+                  Description="Manage native Hyper-V VM groups"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Advertise="yes"
+                  Icon="ProductIcon.exe" />
+      </File>
+      <RemoveFolder Id="RemoveApplicationProgramsFolder"
+                    Directory="ApplicationProgramsFolder"
+                    On="uninstall" />
+    </Component>
+
+    <Component Id="DesktopShortcutComponent"
+               Directory="DesktopFolder"
+               Guid="9719AF88-9400-478F-A31D-F5CEA0FF7F32"
+               Bitness="always64">
+      <Shortcut Id="DesktopShortcut"
+                Name="Hyper-V VM Group Manager"
+                Description="Manage native Hyper-V VM groups"
+                Target="[INSTALLFOLDER]HyperVGroupManager.App.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="ProductIcon.exe" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\HyperVGroupManager"
+                     Name="DesktopShortcut"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <Feature Id="ApplicationFeature"
+             Title="Hyper-V VM Group Manager"
+             Description="Application files and Start menu integration"
+             Level="1"
+             AllowAbsent="no"
+             Display="expand">
+      <Files Include="$(var.PublishDir)\**"
+             Directory="INSTALLFOLDER">
+        <Exclude Files="$(var.PublishDir)\**\*.pdb" />
+        <Exclude Files="$(var.PublishDir)\appsettings.json" />
+        <Exclude Files="$(var.PublishDir)\HyperVGroupManager.App.exe" />
+      </Files>
+      <ComponentRef Id="ApplicationSettingsComponent" />
+      <ComponentRef Id="ApplicationExecutableComponent" />
+
+      <Feature Id="DesktopShortcutFeature"
+               Title="Desktop shortcut"
+               Description="Create a shortcut on the shared desktop"
+               Level="2"
+               AllowAdvertise="no">
+        <ComponentRef Id="DesktopShortcutComponent" />
+      </Feature>
+    </Feature>
+
+    <ui:WixUI Id="WixUI_FeatureTree" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)License.rtf" />
+  </Package>
+</Wix>

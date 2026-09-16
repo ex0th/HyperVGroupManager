@@ -44,6 +44,60 @@ die Startzeit jedoch erhöht, da sie bei jedem Start ins Temp-Verzeichnis extrah
 Für andere Architekturen `-r win-x64` durch z. B. `-r win-arm64` ersetzen und in der `.csproj`
 `<RuntimeIdentifier>` anpassen.
 
+## Vollständiges Release erstellen
+
+Ein einzelner Befehl aktualisiert die Version, testet die Anwendung, baut den MSI-Installer,
+committet alle nicht ignorierten Änderungen, pusht den aktuellen Branch und den Release-Tag und
+startet dadurch die Veröffentlichung auf GitHub:
+
+```powershell
+# Automatische Version
+.\scripts\New-Release.ps1
+
+# Explizite Version und optionale Commit-Nachricht
+.\scripts\New-Release.ps1 -Version 1.0.0 -CommitMessage "release: version 1.0.0"
+```
+
+Existiert für die aktuelle Projektversion noch kein Tag, wird diese Version veröffentlicht.
+Andernfalls wird automatisch die Patch-Version erhöht. Bei einer Vorabversion wird nach ihrem Tag
+zunächst die stabile Variante derselben Versionsnummer gewählt. Das Skript fragt vor den Änderungen
+einmal nach einer Bestätigung; für einen vollständig unbeaufsichtigten Aufruf kann `-Confirm:$false`
+verwendet werden.
+
+Vor dem Commit bricht das Skript bei Merge-Konflikten, einem abweichenden Remote-Branch,
+vorhandenen Release-Tags sowie verdächtigen unversionierten Schlüssel- oder Umgebungsdateien ab.
+Der GitHub-Workflow veröffentlicht anschließend portable ZIP-Datei, MSI und SHA-256-Prüfsummen.
+
+## MSI-Installer bauen und verteilen
+
+Die portable ZIP-Variante bleibt unverändert verfügbar. Zusätzlich kann ein systemweiter
+MSI-Installer erzeugt werden:
+
+```powershell
+.\scripts\Build-Installer.ps1
+```
+
+Das Ergebnis liegt unter `artifacts\release\HyperVGroupManager-<Version>-win-x64.msi`. Der Installer
+verwendet standardmäßig `%ProgramFiles%\HyperVGroupManager`, erstellt einen Startmenüeintrag und
+bietet in der Funktionsauswahl eine Desktop-Verknüpfung an. Vorhandene neuere
+Versionen können nicht versehentlich durch ältere ersetzt werden.
+
+Unbeaufsichtigte Installation und Deinstallation:
+
+```powershell
+msiexec.exe /i HyperVGroupManager-<Version>-win-x64.msi /qn /norestart
+msiexec.exe /x HyperVGroupManager-<Version>-win-x64.msi /qn /norestart
+```
+
+Mit `ADDLOCAL=ALL` wird bei einer unbeaufsichtigten Installation zusätzlich die optionale
+Desktop-Verknüpfung installiert. Benutzereinstellungen und Logs unter `%LocalAppData%` gehören nicht
+zum MSI und bleiben bei Update oder Deinstallation erhalten.
+
+Das Installer-Projekt ist bewusst auf WiX 5.0.2 festgesetzt. WiX 6 und neuer unterliegen den
+Open-Source-Maintenance-Fee-Bedingungen; ein Upgrade der Toolchain sollte deshalb erst nach einer
+separaten Lizenzprüfung erfolgen. WiX 5 wird nicht mehr upstream unterstützt; diese Abwägung sollte
+vor einem produktiven Rollout erneut geprüft werden.
+
 ## Bedienung
 
 1. **Ziel eingeben** (Hostname oder Clustername) und **Verbinden** klicken. Die Statusanzeige

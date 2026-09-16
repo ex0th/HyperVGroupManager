@@ -22,18 +22,44 @@ dotnet run --project src\HyperVGroupManager.App
 
 ## Automated GitHub releases
 
-Releases are built on GitHub from version tags, so no local GitHub CLI installation is required.
-After committing and pushing all changes, make sure `Version`, `AssemblyVersion`, and `FileVersion`
-in `src/HyperVGroupManager.App/HyperVGroupManager.App.csproj` are correct and run:
+One command validates, commits, pushes, tags, and starts the GitHub release workflow; no local GitHub
+CLI installation is required:
 
 ```powershell
-.\scripts\New-Release.ps1 -Version 0.4.1
+# Use the current unreleased project version, or increment the patch after an existing release tag
+.\scripts\New-Release.ps1
+
+# Override the version and optional commit message
+.\scripts\New-Release.ps1 -Version 1.0.0 -CommitMessage "release: version 1.0.0"
 ```
 
-The script requires a clean working tree, verifies that the current commit is already present on
-the remote branch, runs the tests, and pushes the matching `v0.4.1` tag. The release workflow then
-publishes a portable Windows ZIP and its SHA-256 checksum to GitHub Releases. Release notes are
+The script updates all version fields, runs the tests, builds the MSI as a release check, stages and
+commits all non-ignored changes, pushes the current branch, and pushes the matching version tag. If
+the current project version has not been tagged yet, it is used as-is; otherwise the patch number is
+incremented automatically. Potentially sensitive untracked files and diverged remote branches stop
+the release before anything is committed. The tag triggers a workflow that publishes a portable
+Windows ZIP, an MSI installer, and their SHA-256 checksums to GitHub Releases. Release notes are
 generated automatically from the commits since the previous release.
+
+## Windows installer
+
+The portable ZIP remains available. For managed Windows installations, build the MSI locally with:
+
+```powershell
+.\scripts\Build-Installer.ps1
+```
+
+The MSI installs the application for all users under `%ProgramFiles%\HyperVGroupManager`, creates a
+Start menu shortcut, supports major upgrades, and blocks downgrades. A desktop shortcut can be
+selected in the installer's feature selection. Silent enterprise installation is supported:
+
+```powershell
+msiexec.exe /i HyperVGroupManager-<version>-win-x64.msi /qn /norestart
+```
+
+The installer build is intentionally pinned to WiX 5.0.2. WiX 6 and later are subject to the
+Open Source Maintenance Fee terms, so upgrading the toolchain requires a separate license review.
+WiX 5 no longer receives upstream support; reassess this trade-off before a production rollout.
 
 For more information, see the [usage guide](docs/usage.md),
 [architecture documentation](docs/architecture.md), and
@@ -88,6 +114,12 @@ For more information, see the [usage guide](docs/usage.md),
 * Refreshed application branding across the executable, windows, taskbar, and notification area
 * Tray shortcut for restoring or closing the application
 
+## What's new in 0.5
+
+* Optional per-machine MSI installer alongside the unchanged portable ZIP distribution
+* Start menu integration, optional desktop shortcut, clean uninstall, and guarded major upgrades
+* Automated GitHub release assets for ZIP, MSI, and SHA-256 verification
+
 ## MVP scope
 
 Included: native `VMCollectionType` groups on standalone hosts and clusters, multiple group
@@ -95,7 +127,7 @@ memberships, validated changes with an effective-state preview, JSON export, and
 reports for VMs without a group assignment.
 
 Out of scope: Veeam API integration, `ManagementCollectionType`, nested groups, SCVMM,
-Active Directory authentication, an installer, and automatic updates.
+Active Directory authentication, and automatic updates.
 
 ## License
 
