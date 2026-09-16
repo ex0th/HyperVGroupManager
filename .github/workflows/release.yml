@@ -31,7 +31,8 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Validate Artifact Signing configuration
+      - name: Select release signing mode
+        id: signing
         shell: pwsh
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -40,8 +41,19 @@ jobs:
           ARTIFACT_SIGNING_ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
           ARTIFACT_SIGNING_ACCOUNT_NAME: ${{ vars.ARTIFACT_SIGNING_ACCOUNT_NAME }}
           ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          CODE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.CODE_SIGNING_CERTIFICATE_BASE64 }}
         run: |
-          $requiredSettings = @(
+          $tagMessage = & git tag --list '${{ github.ref_name }}' --format='%(contents)'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Unable to read the annotated release tag.'
+          }
+
+          $requestedMode = 'Auto'
+          if (($tagMessage -join "`n") -match '(?im)^Signing-Mode:\s*(Auto|ArtifactSigning|Pfx)\s*$') {
+            $requestedMode = $Matches[1]
+          }
+
+          $azureSettings = @(
             'AZURE_CLIENT_ID',
             'AZURE_TENANT_ID',
             'AZURE_SUBSCRIPTION_ID',
@@ -49,19 +61,108 @@ jobs:
             'ARTIFACT_SIGNING_ACCOUNT_NAME',
             'ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME'
           )
-
-          $missingSettings = @($requiredSettings | Where-Object {
+          $missingAzureSettings = @($azureSettings | Where-Object {
             [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_))
           })
-          if ($missingSettings.Count -gt 0) {
-            throw "Required GitHub environment settings are missing: $($missingSettings -join ', '). Unsigned releases are blocked."
+          $artifactSigningAvailable = $missingAzureSettings.Count -eq 0
+          $pfxSigningAvailable = -not [string]::IsNullOrWhiteSpace($env:CODE_SIGNING_CERTIFICATE_BASE64)
+
+          $mode = switch ($requestedMode) {
+            'ArtifactSigning' {
+              if (-not $artifactSigningAvailable) {
+                throw "Artifact Signing was requested but required settings are missing: $($missingAzureSettings -join ', ')."
+              }
+              'artifact'
+            }
+            'Pfx' {
+              if (-not $pfxSigningAvailable) {
+                throw 'PFX signing was requested but CODE_SIGNING_CERTIFICATE_BASE64 is not configured.'
+              }
+              'pfx'
+            }
+            default {
+              if ($artifactSigningAvailable) {
+                'artifact'
+              }
+              elseif ($pfxSigningAvailable) {
+                Write-Warning "Microsoft Artifact Signing is unavailable; falling back to a non-public PFX signature. Missing settings: $($missingAzureSettings -join ', ')."
+                'pfx'
+              }
+              else {
+                throw 'No signing method is configured. Configure Microsoft Artifact Signing or CODE_SIGNING_CERTIFICATE_BASE64.'
+              }
+            }
           }
 
-          $endpoint = $null
-          if (-not [Uri]::TryCreate($env:ARTIFACT_SIGNING_ENDPOINT, [UriKind]::Absolute, [ref]$endpoint) -or
-              $endpoint.Scheme -ne 'https') {
-            throw 'ARTIFACT_SIGNING_ENDPOINT must be an absolute HTTPS URI.'
+          if ($mode -eq 'artifact') {
+            $endpoint = $null
+            if (-not [Uri]::TryCreate($env:ARTIFACT_SIGNING_ENDPOINT, [UriKind]::Absolute, [ref]$endpoint) -or
+                $endpoint.Scheme -ne 'https') {
+              throw 'ARTIFACT_SIGNING_ENDPOINT must be an absolute HTTPS URI.'
+            }
           }
+
+          "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "SIGNING_MODE=$mode" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Selected release signing mode: $mode (requested: $requestedMode)"
+
+      - name: Prepare private PFX signing certificate
+        if: steps.signing.outputs.mode == 'pfx'
+        shell: pwsh
+        env:
+          SIGNING_CERTIFICATE_BASE64: ${{ secrets.CODE_SIGNING_CERTIFICATE_BASE64 }}
+          CODE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'HyperVGroupManager-CodeSigning.pfx'
+          $publicCertificatePath = Join-Path $env:RUNNER_TEMP 'HyperVGroupManager-CodeSigning.cer'
+          "SIGNING_CERTIFICATE_PATH=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SIGNING_TRUST_CERTIFICATE_PATH=$publicCertificatePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          try {
+            $certificateBytes = [Convert]::FromBase64String($env:SIGNING_CERTIFICATE_BASE64)
+          }
+          catch {
+            throw 'CODE_SIGNING_CERTIFICATE_BASE64 is not valid Base64.'
+          }
+
+          [IO.File]::WriteAllBytes($certificatePath, $certificateBytes)
+          $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+          try {
+            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+              $certificatePath,
+              $env:CODE_SIGNING_CERTIFICATE_PASSWORD,
+              $flags)
+          }
+          catch {
+            throw "The PFX could not be opened. Verify CODE_SIGNING_CERTIFICATE_PASSWORD. $($_.Exception.Message)"
+          }
+
+          if (-not $certificate.HasPrivateKey) {
+            throw 'The configured PFX does not contain a private key.'
+          }
+          if ($certificate.NotAfter.ToUniversalTime() -le [DateTime]::UtcNow) {
+            throw "The configured PFX expired on $($certificate.NotAfter.ToString('u'))."
+          }
+
+          $codeSigningOid = '1.3.6.1.5.5.7.3.3'
+          $hasCodeSigningEku = @($certificate.Extensions |
+            Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension] } |
+            ForEach-Object { $_.EnhancedKeyUsages } |
+            Where-Object { $_.Value -eq $codeSigningOid }).Count -gt 0
+          if (-not $hasCodeSigningEku) {
+            throw 'The configured PFX is not valid for code signing.'
+          }
+
+          [IO.File]::WriteAllBytes(
+            $publicCertificatePath,
+            $certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+
+          # The runner trusts the private certificate only for build-time verification. End-user
+          # devices must receive this public certificate through their managed trust policy.
+          Import-Certificate `
+            -FilePath $publicCertificatePath `
+            -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+
+          "SIGNING_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Validate tag and project version
         shell: pwsh
@@ -141,6 +242,7 @@ jobs:
           "PUBLISHED_EXECUTABLE=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Sign in to Azure with GitHub OIDC
+        if: steps.signing.outputs.mode == 'artifact'
         uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -148,6 +250,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Sign portable executable with Microsoft Artifact Signing
+        if: steps.signing.outputs.mode == 'artifact'
         uses: azure/artifact-signing-action@v2
         with:
           endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
@@ -159,6 +262,16 @@ jobs:
           timestamp-digest: SHA256
           description: Hyper-V VM Group Manager
           description-url: https://github.com/${{ github.repository }}
+
+      - name: Sign portable executable with private PFX
+        if: steps.signing.outputs.mode == 'pfx'
+        shell: pwsh
+        env:
+          CODE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          .\scripts\Sign-Release.ps1 `
+            -Path $env:PUBLISHED_EXECUTABLE `
+            -CertificatePath $env:SIGNING_CERTIFICATE_PATH
 
       - name: Verify portable executable signature
         shell: pwsh
@@ -190,6 +303,7 @@ jobs:
           "INSTALLER_SOURCE=$($installers[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Sign Windows installer with Microsoft Artifact Signing
+        if: steps.signing.outputs.mode == 'artifact'
         uses: azure/artifact-signing-action@v2
         with:
           endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
@@ -201,6 +315,16 @@ jobs:
           timestamp-digest: SHA256
           description: Hyper-V VM Group Manager
           description-url: https://github.com/${{ github.repository }}
+
+      - name: Sign Windows installer with private PFX
+        if: steps.signing.outputs.mode == 'pfx'
+        shell: pwsh
+        env:
+          CODE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          .\scripts\Sign-Release.ps1 `
+            -Path $env:INSTALLER_SOURCE `
+            -CertificatePath $env:SIGNING_CERTIFICATE_PATH
 
       - name: Verify Windows installer signature
         shell: pwsh
@@ -226,8 +350,33 @@ jobs:
           $installerPath = Join-Path $assetDirectory $installerName
           Copy-Item -LiteralPath $env:INSTALLER_SOURCE -Destination $installerPath
 
+          $signature = Get-AuthenticodeSignature -LiteralPath $env:INSTALLER_SOURCE
+          $certificateName = "HyperVGroupManager-$env:RELEASE_VERSION-CodeSigning.cer"
+          $certificatePath = Join-Path $assetDirectory $certificateName
+          [IO.File]::WriteAllBytes(
+            $certificatePath,
+            $signature.SignerCertificate.Export(
+              [System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+
+          $signingInfoPath = Join-Path $assetDirectory "HyperVGroupManager-$env:RELEASE_VERSION-SIGNING.txt"
+          $trustDescription = if ($env:SIGNING_MODE -eq 'artifact') {
+            'Public Trust through Microsoft Azure Artifact Signing.'
+          }
+          else {
+            'Private/self-signed certificate. Windows does not trust this signature by default. Deploy and trust the included public certificate only after verifying its SHA-256 fingerprint through a separate trusted channel.'
+          }
+          @(
+            "Signing mode: $env:SIGNING_MODE",
+            "Trust: $trustDescription",
+            "Subject: $($signature.SignerCertificate.Subject)",
+            "Issuer: $($signature.SignerCertificate.Issuer)",
+            "Certificate thumbprint (SHA-1 identifier): $($signature.SignerCertificate.Thumbprint)",
+            "Certificate SHA-256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $certificatePath).Hash.ToLowerInvariant())",
+            "Timestamp subject: $($signature.TimeStamperCertificate.Subject)"
+          ) | Set-Content -LiteralPath $signingInfoPath -Encoding utf8
+
           $checksumPath = Join-Path $assetDirectory "HyperVGroupManager-$env:RELEASE_VERSION-SHA256SUMS.txt"
-          @($archivePath, $installerPath) | ForEach-Object {
+          @($archivePath, $installerPath, $certificatePath, $signingInfoPath) | ForEach-Object {
             $file = Get-Item -LiteralPath $_
             $checksum = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
             "$checksum  $($file.Name)"
@@ -235,6 +384,8 @@ jobs:
 
           "RELEASE_ARCHIVE=$archivePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "RELEASE_INSTALLER=$installerPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_CERTIFICATE=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_SIGNING_INFO=$signingInfoPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "RELEASE_CHECKSUM=$checksumPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Create GitHub release
@@ -247,9 +398,11 @@ jobs:
             'release', 'create', '${{ github.ref_name }}',
             $env:RELEASE_ARCHIVE,
             $env:RELEASE_INSTALLER,
+            $env:RELEASE_CERTIFICATE,
+            $env:RELEASE_SIGNING_INFO,
             $env:RELEASE_CHECKSUM,
             '--verify-tag',
-            '--title', "Hyper-V VM Group Manager $env:RELEASE_VERSION",
+            '--title', "Hyper-V VM Group Manager $env:RELEASE_VERSION$(if ($env:SIGNING_MODE -eq 'pfx') { ' (private signature)' })",
             '--generate-notes'
           )
 
@@ -260,4 +413,25 @@ jobs:
           & gh @arguments
           if ($LASTEXITCODE -ne 0) {
             throw "GitHub release creation failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Remove temporary private signing material and trust
+        if: always() && steps.signing.outputs.mode == 'pfx'
+        shell: pwsh
+        run: |
+          if (-not [string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE_THUMBPRINT)) {
+            $trustedCertificate = Join-Path 'Cert:\CurrentUser\Root' $env:SIGNING_CERTIFICATE_THUMBPRINT
+            if (Test-Path -LiteralPath $trustedCertificate) {
+              Remove-Item -LiteralPath $trustedCertificate -Force
+            }
+          }
+
+          if (-not [string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE_PATH) -and
+              (Test-Path -LiteralPath $env:SIGNING_CERTIFICATE_PATH)) {
+            [IO.File]::Delete($env:SIGNING_CERTIFICATE_PATH)
+          }
+
+          if (-not [string]::IsNullOrWhiteSpace($env:SIGNING_TRUST_CERTIFICATE_PATH) -and
+              (Test-Path -LiteralPath $env:SIGNING_TRUST_CERTIFICATE_PATH)) {
+            [IO.File]::Delete($env:SIGNING_TRUST_CERTIFICATE_PATH)
           }

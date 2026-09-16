@@ -66,14 +66,26 @@ WiX 5 no longer receives upstream support; reassess this trade-off before a prod
 
 ## Release signing
 
-GitHub releases use Microsoft Azure Artifact Signing with a Public Trust certificate profile and
-keyless OpenID Connect authentication. No certificate or long-lived Azure credential is stored in
-GitHub. The workflow signs and verifies the portable executable before packaging it, embeds that
-signed executable in the MSI, and then signs and verifies the MSI. It fails closed if signing is not
-configured or either signature is invalid.
+GitHub releases prefer Microsoft Azure Artifact Signing with a Public Trust certificate profile and
+keyless OpenID Connect authentication. If Artifact Signing is not fully configured, the default
+`Auto` mode falls back to a private/self-signed PFX stored in GitHub environment secrets. The
+workflow never publishes unsigned artifacts: it signs and verifies the portable executable before
+packaging it, embeds that executable in the MSI, and then signs and verifies the MSI.
 
 The one-time Azure, Entra ID, RBAC, GitHub environment, secret, and variable setup is documented in
 [Artifact Signing setup](docs/artifact-signing.md).
+
+The release script records the requested mode in the annotated tag:
+
+```powershell
+.\scripts\New-Release.ps1                              # Public Trust, otherwise PFX fallback
+.\scripts\New-Release.ps1 -SigningMode ArtifactSigning # require Microsoft Public Trust
+.\scripts\New-Release.ps1 -SigningMode Pfx             # require the private PFX
+```
+
+Private signatures are not trusted by Windows unless the public certificate is deployed to the
+target devices through a managed trust policy. Every release includes the exact signing certificate
+and a signing report for verification.
 
 For local development only, `scripts\Sign-Release.ps1` and `scripts\Build-Installer.ps1` continue
 to support a PFX file or a certificate-store thumbprint:

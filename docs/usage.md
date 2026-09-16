@@ -104,14 +104,27 @@ vor einem produktiven Rollout erneut geprüft werden.
 
 ## Release-Dateien signieren
 
-Der GitHub-Release-Workflow verwendet Microsoft Azure Artifact Signing mit einem Public-Trust-
-Zertifikatprofil. GitHub meldet sich über OpenID Connect (OIDC) bei Azure an. Dadurch werden weder
-ein PFX noch ein privater Schlüssel oder ein dauerhaftes Azure-Client-Secret in GitHub gespeichert.
+Der GitHub-Release-Workflow bevorzugt Microsoft Azure Artifact Signing mit einem Public-Trust-
+Zertifikatprofil. Ist Artifact Signing nicht vollständig konfiguriert, fällt der Standardmodus
+`Auto` auf ein privates bzw. selbstsigniertes PFX aus den GitHub-Environment-Secrets zurück.
 
 Der Workflow signiert zuerst die portable EXE, baut das MSI mit dieser signierten EXE und signiert
 danach auch das MSI. Beide Signaturen werden vor dem Verpacken geprüft. Bei fehlender Konfiguration
 oder ungültiger Signatur wird kein Release veröffentlicht. Die einmalige Einrichtung ist unter
 [Artifact Signing einrichten](artifact-signing.md) beschrieben.
+
+Der Modus kann pro Release festgelegt werden:
+
+```powershell
+.\scripts\New-Release.ps1                              # Public Trust, sonst PFX
+.\scripts\New-Release.ps1 -SigningMode ArtifactSigning # Public Trust erzwingen
+.\scripts\New-Release.ps1 -SigningMode Pfx             # PFX erzwingen
+```
+
+Ein PFX-Release ist nicht öffentlich vertrauenswürdig. Die mitveröffentlichte `.cer`-Datei muss auf
+den Zielgeräten nach separater Prüfung über Gruppenrichtlinie, Intune oder einen vergleichbaren
+verwalteten Prozess als vertrauenswürdig verteilt werden. Zusätzlich enthält jeder Release eine
+`SIGNING.txt` mit Modus, Zertifikatsdaten und SHA-256-Fingerabdruck.
 
 Für lokale Entwicklung und interne Testzertifikate bleiben `scripts\Sign-Release.ps1` und die
 PFX-/Zertifikatsspeicher-Parameter von `scripts\Build-Installer.ps1` verfügbar.

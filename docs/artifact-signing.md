@@ -1,8 +1,9 @@
 # Microsoft Azure Artifact Signing setup
 
-GitHub releases are signed with an Azure Artifact Signing **Public Trust** certificate profile.
-Authentication uses GitHub OpenID Connect (OIDC), so the repository does not store a PFX, private
-key, or Azure client secret.
+GitHub releases prefer an Azure Artifact Signing **Public Trust** certificate profile.
+Authentication uses GitHub OpenID Connect (OIDC), so this mode does not store a PFX, private key,
+or Azure client secret in the repository. When Public Trust is unavailable, the workflow can fall
+back to a private/self-signed PFX stored as encrypted GitHub environment secrets.
 
 > Public Trust is currently available to organizations in the EU and several other supported
 > regions. Individual developers are currently limited to the United States and Canada. A German
@@ -78,18 +79,19 @@ Add these environment variables:
 
 The three identifiers stored as secrets are not private keys, but keeping them as environment
 secrets follows the Azure GitHub OIDC guidance and keeps all release identity settings together.
-Do not create `AZURE_CLIENT_SECRET`, `CODE_SIGNING_CERTIFICATE_BASE64`, or
-`CODE_SIGNING_CERTIFICATE_PASSWORD`.
+Do not create `AZURE_CLIENT_SECRET`; OIDC does not need one.
 
 The endpoint must match the Azure region of the signing account. A region mismatch normally causes
 a `403 Forbidden` signing error.
 
 ## 5. Publish and verify
 
-Create a release with the existing script:
+Create a release with the existing script. `Auto` prefers Artifact Signing and falls back to PFX:
 
 ```powershell
 .\scripts\New-Release.ps1
+.\scripts\New-Release.ps1 -SigningMode ArtifactSigning
+.\scripts\New-Release.ps1 -SigningMode Pfx
 ```
 
 The workflow performs these security-relevant steps:
@@ -114,3 +116,37 @@ Get-AuthenticodeSignature .\HyperVGroupManager-1.0.1-win-x64.msi |
 The expected status is `Valid`. New signing identities can still require time to build Microsoft
 SmartScreen reputation; a valid public signature does not guarantee that SmartScreen warnings
 disappear immediately.
+
+## Private PFX fallback
+
+The fallback requires these environment secrets in the GitHub `release` environment:
+
+| Secret | Value |
+| --- | --- |
+| `CODE_SIGNING_CERTIFICATE_BASE64` | Base64-encoded code-signing PFX including its private key |
+| `CODE_SIGNING_CERTIFICATE_PASSWORD` | PFX password; omit only for a passwordless PFX |
+
+Create the Base64 value locally without printing the private key to the console:
+
+```powershell
+$pfxPath = 'C:\Secure\HyperVGroupManager-CodeSigning.pfx'
+[Convert]::ToBase64String([IO.File]::ReadAllBytes($pfxPath)) | Set-Clipboard
+```
+
+The runner validates the PFX, requires a private key and Code Signing EKU, and temporarily trusts
+the public certificate so that Authenticode verification can run. The trust entry and PFX are
+removed in an `always()` cleanup step. The PFX itself is never published.
+
+Every release publishes:
+
+* the signed portable ZIP;
+* the signed MSI;
+* the public signing certificate as `HyperVGroupManager-<version>-CodeSigning.cer`;
+* `HyperVGroupManager-<version>-SIGNING.txt` with the mode and certificate fingerprints;
+* SHA-256 checksums covering all four files.
+
+A private/self-signed signature is **not** publicly trusted and does not remove SmartScreen
+warnings. Only deploy the included certificate to managed customer devices after validating its
+SHA-256 fingerprint through a separate trusted channel. Microsoft documents self-signed
+certificates as suitable only for development/testing or enterprise environments with managed
+certificate trust.

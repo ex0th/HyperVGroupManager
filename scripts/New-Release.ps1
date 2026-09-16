@@ -8,6 +8,9 @@ param(
 
     [string]$CommitMessage,
 
+    [ValidateSet('Auto', 'ArtifactSigning', 'Pfx')]
+    [string]$SigningMode = 'Auto',
+
     [switch]$SkipTests,
 
     [ValidateRange(1, 120)]
@@ -156,6 +159,8 @@ function Wait-GitHubRelease {
     $expectedAssets = @(
         "HyperVGroupManager-$ReleaseVersion-win-x64.zip",
         "HyperVGroupManager-$ReleaseVersion-win-x64.msi",
+        "HyperVGroupManager-$ReleaseVersion-CodeSigning.cer",
+        "HyperVGroupManager-$ReleaseVersion-SIGNING.txt",
         "HyperVGroupManager-$ReleaseVersion-SHA256SUMS.txt"
     )
     $lastStatus = ''
@@ -478,7 +483,7 @@ try
 
     if (-not $PSCmdlet.ShouldProcess(
         "$Remote/$branch and $Remote/$tagName",
-        "Update to $Version, test, commit all changes, push the branch, and publish the release"))
+        "Update to $Version, test, commit all changes, push the branch, and publish the release with signing mode $SigningMode"))
     {
         return
     }
@@ -551,7 +556,8 @@ try
     }
     else
     {
-        $null = Invoke-Git -Arguments @('tag', '--annotate', $tagName, $head, '--message', "Hyper-V VM Group Manager $Version")
+        $tagMessage = "Hyper-V VM Group Manager $Version`n`nSigning-Mode: $SigningMode"
+        $null = Invoke-Git -Arguments @('tag', '--annotate', $tagName, $head, '--message', $tagMessage)
     }
 
     $null = Invoke-Git -Arguments @('push', $Remote, "refs/tags/$tagName")
