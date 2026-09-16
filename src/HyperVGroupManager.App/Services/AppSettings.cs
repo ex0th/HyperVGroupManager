@@ -51,7 +51,21 @@ public static class AppSettingsLoader
                 ExecutionPolicy = NormalizeExecutionPolicy(powerShell.ExecutionPolicy),
                 TimeoutSeconds = Math.Clamp(powerShell.TimeoutSeconds, 10, 3600),
             },
-            Application = settings.Application ?? new ApplicationOptions(),
+            Application = NormalizeApplicationOptions(settings.Application),
+        };
+    }
+
+    private static ApplicationOptions NormalizeApplicationOptions(ApplicationOptions? options)
+    {
+        options ??= new ApplicationOptions();
+        return new ApplicationOptions
+        {
+            DefaultGroupPrefix = string.IsNullOrWhiteSpace(options.DefaultGroupPrefix)
+                ? "VEEAM_"
+                : options.DefaultGroupPrefix.Trim(),
+            ConfirmBeforeApply = options.ConfirmBeforeApply,
+            LogRetentionDays = Math.Clamp(options.LogRetentionDays, 1, 365),
+            MaximumLogFileSizeMegabytes = Math.Clamp(options.MaximumLogFileSizeMegabytes, 1, 100),
         };
     }
 

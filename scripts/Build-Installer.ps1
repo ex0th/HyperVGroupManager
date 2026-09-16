@@ -1,7 +1,11 @@
 [CmdletBinding()]
 param(
     [string]$OutputDirectory,
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [string]$CertificatePath,
+    [string]$CertificateThumbprint,
+    [ValidatePattern('^https?://')]
+    [string]$TimestampUrl = 'http://timestamp.digicert.com'
 )
 
 Set-StrictMode -Version Latest
@@ -40,6 +44,16 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repositoryRoot 'src\HyperVGroupManager.App\HyperVGroupManager.App.csproj'
 $installerProjectPath = Join-Path $repositoryRoot 'installer\HyperVGroupManager.Installer.wixproj'
 $solutionPath = Join-Path $repositoryRoot 'HyperVGroupManager.sln'
+$signingScriptPath = Join-Path $repositoryRoot 'scripts\Sign-Release.ps1'
+
+if (-not [string]::IsNullOrWhiteSpace($CertificatePath) -and
+    -not [string]::IsNullOrWhiteSpace($CertificateThumbprint))
+{
+    throw 'Specify either -CertificatePath or -CertificateThumbprint, not both.'
+}
+
+$signingRequested = -not [string]::IsNullOrWhiteSpace($CertificatePath) -or
+    -not [string]::IsNullOrWhiteSpace($CertificateThumbprint)
 
 if ([string]::IsNullOrWhiteSpace($OutputDirectory))
 {
@@ -90,6 +104,24 @@ try
         '-o', $publishDirectory
     )
 
+    if ($signingRequested)
+    {
+        $signingArguments = @{
+            Path = Join-Path $publishDirectory 'HyperVGroupManager.App.exe'
+            TimestampUrl = $TimestampUrl
+        }
+        if (-not [string]::IsNullOrWhiteSpace($CertificatePath))
+        {
+            $signingArguments.CertificatePath = $CertificatePath
+        }
+        else
+        {
+            $signingArguments.CertificateThumbprint = $CertificateThumbprint
+        }
+
+        & $signingScriptPath @signingArguments
+    }
+
     Invoke-DotNet -Arguments @('restore', $installerProjectPath)
     Invoke-DotNet -Arguments @(
         'build', $installerProjectPath,
@@ -108,6 +140,12 @@ try
 
     $destinationPath = Join-Path $OutputDirectory "HyperVGroupManager-$version-win-x64.msi"
     Copy-Item -LiteralPath $installerFiles[0].FullName -Destination $destinationPath -Force
+
+    if ($signingRequested)
+    {
+        $signingArguments.Path = $destinationPath
+        & $signingScriptPath @signingArguments
+    }
 
     $checksum = (Get-FileHash -Algorithm SHA256 -LiteralPath $destinationPath).Hash.ToLowerInvariant()
     Write-Host "Installer created: $destinationPath"

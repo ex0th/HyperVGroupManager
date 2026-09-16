@@ -91,13 +91,16 @@ namespace HyperVGroupManager.App
             {
                 builder.SetMinimumLevel(LogLevel.Information);
                 builder.AddDebug();
-                builder.AddProvider(new FileLoggerProvider());
+                builder.AddProvider(new FileLoggerProvider(
+                    settings.Application.LogRetentionDays,
+                    settings.Application.MaximumLogFileSizeMegabytes));
             });
 
             services.AddSingleton<ILogService, LogService>();
             services.AddSingleton<IPowerShellExecutor, PowerShellExecutor>();
             services.AddSingleton<IHyperVGroupService, HyperVGroupService>();
             services.AddSingleton<EmailReportService>();
+            services.AddSingleton<SupportPackageService>();
             services.AddSingleton<MainViewModel>();
             services.AddSingleton<MainWindow>();
             services.AddSingleton<TrayIconService>();

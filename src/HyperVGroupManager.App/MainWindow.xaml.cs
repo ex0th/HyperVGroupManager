@@ -21,14 +21,20 @@ namespace HyperVGroupManager.App
         private readonly MainViewModel _viewModel;
         private readonly IHyperVGroupService _hyperVGroupService;
         private readonly EmailReportService _emailReportService;
+        private readonly SupportPackageService _supportPackageService;
 
-        public MainWindow(MainViewModel viewModel, IHyperVGroupService hyperVGroupService, EmailReportService emailReportService)
+        public MainWindow(
+            MainViewModel viewModel,
+            IHyperVGroupService hyperVGroupService,
+            EmailReportService emailReportService,
+            SupportPackageService supportPackageService)
         {
             InitializeComponent();
 
             _viewModel = viewModel;
             _hyperVGroupService = hyperVGroupService;
             _emailReportService = emailReportService;
+            _supportPackageService = supportPackageService;
             DataContext = _viewModel;
 
             _viewModel.ErrorOccurred += OnViewModelErrorOccurred;
@@ -59,7 +65,8 @@ namespace HyperVGroupManager.App
             e.Handled = true;
         }
 
-        private void ShowHelp() => new HelpWindow { Owner = this }.ShowDialog();
+        private void ShowHelp() =>
+            new HelpWindow(_supportPackageService, _viewModel.ConnectedTargetName) { Owner = this }.ShowDialog();
 
         private void VirtualMachinesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {

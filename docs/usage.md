@@ -102,6 +102,48 @@ Open-Source-Maintenance-Fee-Bedingungen; ein Upgrade der Toolchain sollte deshal
 separaten Lizenzprüfung erfolgen. WiX 5 wird nicht mehr upstream unterstützt; diese Abwägung sollte
 vor einem produktiven Rollout erneut geprüft werden.
 
+## Release-Dateien signieren
+
+Der GitHub-Release-Workflow veröffentlicht keine unsignierten Builds. Er signiert zuerst die
+portable EXE, baut das MSI mit dieser signierten EXE und signiert danach auch das MSI. Beide
+Signaturen werden vor dem Verpacken mit SignTool geprüft.
+
+In den GitHub-Repository-Secrets müssen hinterlegt sein:
+
+* `CODE_SIGNING_CERTIFICATE_BASE64`: Base64-kodierte PFX-Datei mit Authenticode-Zertifikat und
+  privatem Schlüssel
+* `CODE_SIGNING_CERTIFICATE_PASSWORD`: Kennwort der PFX-Datei, sofern vorhanden
+
+Die temporäre PFX-Datei existiert nur auf dem kurzlebigen GitHub-Runner und wird durch einen
+`always()`-Schritt entfernt. Ohne das Zertifikat bricht der Workflow ab. Lokal können Dateien über
+`scripts\Sign-Release.ps1` entweder mit einer PFX-Datei oder dem Thumbprint eines Zertifikats im
+Windows-Zertifikatsspeicher signiert werden.
+
+Ein lokaler Build kann die portable EXE vor dem Verpacken und anschließend das MSI signieren:
+
+```powershell
+$env:CODE_SIGNING_CERTIFICATE_PASSWORD = '<PFX-Kennwort>'
+.\scripts\Build-Installer.ps1 -CertificatePath C:\secure\codesigning.pfx
+```
+
+## Supportpaket und Log-Aufbewahrung
+
+Im Hilfefenster erzeugt **Supportpaket erstellen** ein ZIP-Archiv mit Laufzeitinformationen,
+Signaturstatus und aktuellen Anwendungs- und Crash-Logs. Benutzername, Rechnername, Benutzerpfade,
+verbundenes Ziel, E-Mail-Adressen und IP-Adressen werden ersetzt. SMTP-Konfiguration,
+Anwendungseinstellungen und Zugangsdaten werden nicht aufgenommen. Das Archiv sollte trotzdem vor
+der Weitergabe geprüft werden.
+
+Das Paket enthält höchstens 14 Logdateien, maximal 5 MB je Datei und maximal 20 MB Logdaten
+insgesamt. Die normale Log-Aufbewahrung und Größenrotation sind in `appsettings.json` konfigurierbar:
+
+```json
+"Application": {
+  "LogRetentionDays": 30,
+  "MaximumLogFileSizeMegabytes": 10
+}
+```
+
 ## Bedienung
 
 1. **Ziel eingeben** (Hostname oder Clustername) und **Verbinden** klicken. Die Statusanzeige

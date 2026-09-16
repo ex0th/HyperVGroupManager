@@ -64,6 +64,32 @@ The installer build is intentionally pinned to WiX 5.0.2. WiX 6 and later are su
 Open Source Maintenance Fee terms, so upgrading the toolchain requires a separate license review.
 WiX 5 no longer receives upstream support; reassess this trade-off before a production rollout.
 
+## Release signing
+
+GitHub releases are fail-closed: the workflow signs and verifies the portable executable before it
+is packaged and then signs and verifies the MSI. An unsigned release is not published. Configure
+these repository secrets before creating a release:
+
+* `CODE_SIGNING_CERTIFICATE_BASE64`: Base64-encoded PFX containing the Authenticode certificate and
+  private key
+* `CODE_SIGNING_CERTIFICATE_PASSWORD`: password of that PFX, if it has one
+
+The temporary PFX is written only to the ephemeral GitHub runner and removed in an `always()` step.
+Signing uses SHA-256 and an RFC 3161 timestamp. For local signing, use
+`scripts\Sign-Release.ps1` with either a PFX path or a certificate-store thumbprint.
+
+```powershell
+$env:CODE_SIGNING_CERTIFICATE_PASSWORD = '<PFX password>'
+.\scripts\Build-Installer.ps1 -CertificatePath C:\secure\codesigning.pfx
+```
+
+## Support packages and log retention
+
+The Help window can create a ZIP support package containing runtime diagnostics and up to 20 MB of
+recent logs. Common personal and infrastructure values are redacted, and SMTP/application settings
+are never included. Review the archive before sharing it. Logs are retained for 30 days by default
+and rotate at 10 MB per file; both limits are configurable in `appsettings.json`.
+
 For more information, see the [usage guide](docs/usage.md),
 [architecture documentation](docs/architecture.md), and
 [PowerShell JSON contract](docs/powershell-json-contract.md).
