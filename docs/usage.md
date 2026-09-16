@@ -72,6 +72,10 @@ oben rechts jederzeit zwischen **Deutsch** und **English** umgeschaltet werden. 
 `%LocalAppData%\HyperVGroupManager\ui-language.txt` gespeichert; der portable Programmordner wird
 dabei nicht verändert.
 
+Daneben kann die Darstellung zwischen **System**, **Dunkel** und **Hell** umgeschaltet werden.
+`System` folgt der Windows-Einstellung. Die Auswahl wird sofort auf alle Fenster angewendet und in
+`%LocalAppData%\HyperVGroupManager\ui-theme.txt` gespeichert.
+
 Ein Wechsel zu einem anderen Ziel ist mit offenen Änderungen blockiert. Nach Timeout, Abbruch oder
 einer nicht eindeutig zuordenbaren Backend-Antwort sperrt die Anwendung weitere Schreibvorgänge,
 bis **Aktualisieren** den tatsächlichen Zustand erfolgreich neu geladen hat.

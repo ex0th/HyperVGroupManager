@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using HyperVGroupManager.App.Services;
 using HyperVGroupManager.App.ViewModels;
 using HyperVGroupManager.App.Localization;
+using HyperVGroupManager.App.Theming;
 using HyperVGroupManager.Core.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -20,6 +21,7 @@ namespace HyperVGroupManager.App
             DispatcherUnhandledException += OnDispatcherUnhandledException;
             AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
             LocalizationService.Instance.Initialize();
+            ThemeService.Instance.Initialize();
 
             var services = new ServiceCollection();
             ConfigureServices(services);

@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:coreServices="clr-namespace:HyperVGroupManager.Core.Services;assembly=HyperVGroupManager.Core"
         xmlns:loc="clr-namespace:HyperVGroupManager.App.Localization"
+        xmlns:theming="clr-namespace:HyperVGroupManager.App.Theming"
         mc:Ignorable="d" Title="{loc:Loc App.Title}"
         Height="860" Width="1380" MinHeight="700" MinWidth="1080"
         Icon="Assets/app-icon.png" WindowStartupLocation="CenterScreen"
@@ -35,10 +36,17 @@
                 <Button Content="{loc:Loc Common.Settings}" Margin="0,20,8,0" Click="ClusterConfigButton_Click"
                         IsEnabled="{Binding CanUseConnectedTarget}" />
                 <Button Content="{loc:Loc Common.Help}" Margin="0,20,8,0" Click="HelpButton_Click" ToolTip="{loc:Loc Main.HelpTooltip}" />
-                <ComboBox Margin="0,20,0,0" Width="104" ToolTip="{loc:Loc Main.LanguageTooltip}"
+                <ComboBox Margin="0,20,8,0" Width="104" ToolTip="{loc:Loc Main.LanguageTooltip}"
                           ItemsSource="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=SupportedLanguages}"
                           DisplayMemberPath="DisplayName" SelectedValuePath="Code"
                           SelectedValue="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=CurrentLanguageCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <ComboBox Margin="0,20,0,0" Width="92" ToolTip="{loc:Loc Theme.Tooltip}"
+                          SelectedValuePath="Tag"
+                          SelectedValue="{Binding Source={x:Static theming:ThemeService.Instance}, Path=CurrentThemeCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                    <ComboBoxItem Content="{loc:Loc Theme.System}" Tag="system" />
+                    <ComboBoxItem Content="{loc:Loc Theme.Dark}" Tag="dark" />
+                    <ComboBoxItem Content="{loc:Loc Theme.Light}" Tag="light" />
+                </ComboBox>
             </StackPanel>
         </Grid>
 
@@ -163,11 +171,11 @@
                                             <WrapPanel Margin="0,3,0,0">
                                                 <Border Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,2" Margin="0,0,5,0"
                                                         Visibility="{Binding HasAdditions, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <TextBlock Text="{Binding AddedGroupsDisplay}" Foreground="#48B982" FontSize="11" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding AddedGroupsDisplay}" Foreground="{DynamicResource SystemFillColorSuccessBrush}" FontSize="11" FontWeight="SemiBold" />
                                                 </Border>
                                                 <Border Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,2" Margin="0,0,5,0"
                                                         Visibility="{Binding HasRemovals, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <TextBlock Text="{Binding RemovedGroupsDisplay}" Foreground="#E56B66" FontSize="11" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding RemovedGroupsDisplay}" Foreground="{DynamicResource SystemFillColorCriticalBrush}" FontSize="11" FontWeight="SemiBold" />
                                                 </Border>
                                                 <Border Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,2"
                                                         Visibility="{Binding HasRenames, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -246,10 +254,10 @@
                             <Setter Property="Fill" Value="{DynamicResource TextFillColorDisabledBrush}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsConnected}" Value="True">
-                                    <Setter Property="Fill" Value="#48B982" />
+                                    <Setter Property="Fill" Value="{DynamicResource SystemFillColorSuccessBrush}" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsConnectionError}" Value="True">
-                                    <Setter Property="Fill" Value="#E56B66" />
+                                    <Setter Property="Fill" Value="{DynamicResource SystemFillColorCriticalBrush}" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>

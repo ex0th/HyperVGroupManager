@@ -8,6 +8,10 @@ be added or removed without affecting its other group assignments. These groups 
 used as stable VM selection objects in Veeam Backup & Replication. The application does not modify
 Veeam configuration or backup jobs.
 
+## Screenshot
+
+![Hyper-V VM Group Manager main window in dark mode](docs/images/hyper-v-vm-group-manager.png)
+
 ## Quick start
 
 ```powershell
@@ -57,6 +61,12 @@ For more information, see the [usage guide](docs/usage.md),
 * Connection-aware action states and safe disabling of apply operations without pending changes
 * Search placeholders and contextual empty-state messages
 * Visual VM change markers with added, removed, and renamed group badges
+
+## What's new in 0.4
+
+* Runtime appearance selection with System, Dark, and Light modes
+* Native Fluent title-bar and control updates without restarting the application
+* Persistent per-user theme preference without modifying the portable application directory
 
 ## MVP scope
 
