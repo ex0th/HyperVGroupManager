@@ -67,6 +67,10 @@ verwendet werden.
 Vor dem Commit bricht das Skript bei Merge-Konflikten, einem abweichenden Remote-Branch,
 vorhandenen Release-Tags sowie verdächtigen unversionierten Schlüssel- oder Umgebungsdateien ab.
 Der GitHub-Workflow veröffentlicht anschließend portable ZIP-Datei, MSI und SHA-256-Prüfsummen.
+Das Skript wartet standardmäßig bis zu 20 Minuten und meldet erst dann Erfolg, wenn alle drei Dateien
+im GitHub Release vorhanden sind. Mit `-NoWait` kehrt es direkt nach dem Tag-Push zurück; über
+`-ReleaseTimeoutMinutes 30` kann das Zeitlimit angepasst werden. Für private Repositories muss zur
+API-Prüfung `GH_TOKEN` oder `GITHUB_TOKEN` gesetzt sein.
 
 ## MSI-Installer bauen und verteilen
 

@@ -38,8 +38,11 @@ commits all non-ignored changes, pushes the current branch, and pushes the match
 the current project version has not been tagged yet, it is used as-is; otherwise the patch number is
 incremented automatically. Potentially sensitive untracked files and diverged remote branches stop
 the release before anything is committed. The tag triggers a workflow that publishes a portable
-Windows ZIP, an MSI installer, and their SHA-256 checksums to GitHub Releases. Release notes are
-generated automatically from the commits since the previous release.
+Windows ZIP, an MSI installer, and their SHA-256 checksums to GitHub Releases. The script waits for
+that workflow and verifies all three assets before reporting success. Release notes are generated
+automatically from the commits since the previous release. Use `-NoWait` to return immediately after
+the tag push, or `-ReleaseTimeoutMinutes 30` to change the default 20-minute timeout. Private
+repositories require `GH_TOKEN` or `GITHUB_TOKEN` for the verification API.
 
 ## Windows installer
 

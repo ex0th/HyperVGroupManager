@@ -8,7 +8,12 @@ param(
 
     [string]$CommitMessage,
 
-    [switch]$SkipTests
+    [switch]$SkipTests,
+
+    [ValidateRange(1, 120)]
+    [int]$ReleaseTimeoutMinutes = 20,
+
+    [switch]$NoWait
 )
 
 Set-StrictMode -Version Latest
@@ -68,6 +73,145 @@ function Assert-CommandAvailable {
     {
         throw "Required command '$Name' was not found in PATH."
     }
+}
+
+function Get-GitHubRepository {
+    param([Parameter(Mandatory)][string]$RemoteUrl)
+
+    if ($RemoteUrl -match '^https://github\.com/(?<repository>[^/]+/[^/]+?)(?:\.git)?/?$' -or
+        $RemoteUrl -match '^git@github\.com:(?<repository>[^/]+/[^/]+?)(?:\.git)?$' -or
+        $RemoteUrl -match '^ssh://git@github\.com/(?<repository>[^/]+/[^/]+?)(?:\.git)?/?$')
+    {
+        return $Matches.repository
+    }
+
+    return $null
+}
+
+function Invoke-GitHubApi {
+    param(
+        [Parameter(Mandatory)][string]$Uri,
+        [switch]$AllowNotFound
+    )
+
+    $headers = @{
+        Accept = 'application/vnd.github+json'
+        'User-Agent' = 'HyperVGroupManager-ReleaseScript'
+        'X-GitHub-Api-Version' = '2026-03-10'
+    }
+
+    $token = if (-not [string]::IsNullOrWhiteSpace($env:GH_TOKEN))
+    {
+        $env:GH_TOKEN
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN))
+    {
+        $env:GITHUB_TOKEN
+    }
+    else
+    {
+        $null
+    }
+
+    if ($null -ne $token)
+    {
+        $headers.Authorization = "Bearer $token"
+    }
+
+    try
+    {
+        return Invoke-RestMethod -Method Get -Uri $Uri -Headers $headers
+    }
+    catch
+    {
+        $response = $_.Exception.Response
+        $statusCode = if ($null -ne $response) { [int]$response.StatusCode } else { 0 }
+        if ($AllowNotFound -and $statusCode -eq 404)
+        {
+            return $null
+        }
+
+        if ($statusCode -eq 403 -and $null -eq $token)
+        {
+            throw "GitHub API access was denied or rate-limited. Set GH_TOKEN and retry the release verification. $($_.Exception.Message)"
+        }
+
+        throw
+    }
+}
+
+function Wait-GitHubRelease {
+    param(
+        [Parameter(Mandatory)][string]$Repository,
+        [Parameter(Mandatory)][string]$TagName,
+        [Parameter(Mandatory)][string]$CommitSha,
+        [Parameter(Mandatory)][string]$ReleaseVersion,
+        [Parameter(Mandatory)][int]$TimeoutMinutes
+    )
+
+    $deadline = [DateTimeOffset]::UtcNow.AddMinutes($TimeoutMinutes)
+    $encodedTag = [Uri]::EscapeDataString($TagName)
+    $workflowUri = "https://api.github.com/repos/$Repository/actions/workflows/release.yml/runs?event=push&head_sha=$CommitSha&per_page=10"
+    $releaseUri = "https://api.github.com/repos/$Repository/releases/tags/$encodedTag"
+    $expectedAssets = @(
+        "HyperVGroupManager-$ReleaseVersion-win-x64.zip",
+        "HyperVGroupManager-$ReleaseVersion-win-x64.msi",
+        "HyperVGroupManager-$ReleaseVersion-SHA256SUMS.txt"
+    )
+    $lastStatus = ''
+
+    while ([DateTimeOffset]::UtcNow -lt $deadline)
+    {
+        $workflowResponse = Invoke-GitHubApi -Uri $workflowUri
+        $workflowRun = @($workflowResponse.workflow_runs |
+            Where-Object { $_.head_sha -eq $CommitSha } |
+            Sort-Object -Property created_at -Descending |
+            Select-Object -First 1)
+
+        if ($workflowRun.Count -gt 0)
+        {
+            $run = $workflowRun[0]
+            $currentStatus = if ($run.status -eq 'completed')
+            {
+                "completed/$($run.conclusion)"
+            }
+            else
+            {
+                [string]$run.status
+            }
+
+            if ($currentStatus -ne $lastStatus)
+            {
+                Write-Host "GitHub release workflow: $currentStatus"
+                $lastStatus = $currentStatus
+            }
+
+            if ($run.status -eq 'completed' -and $run.conclusion -ne 'success')
+            {
+                throw "GitHub release workflow finished with '$($run.conclusion)': $($run.html_url)"
+            }
+
+            if ($run.status -eq 'completed' -and $run.conclusion -eq 'success')
+            {
+                $release = Invoke-GitHubApi -Uri $releaseUri -AllowNotFound
+                if ($null -ne $release -and -not $release.draft)
+                {
+                    $publishedAssets = @($release.assets | ForEach-Object { $_.name })
+                    $missingAssets = @($expectedAssets | Where-Object { $_ -notin $publishedAssets })
+                    if ($missingAssets.Count -eq 0)
+                    {
+                        Write-Host "GitHub release published successfully: $($release.html_url)"
+                        Write-Host "Published assets: $($expectedAssets -join ', ')"
+                        return
+                    }
+                }
+            }
+        }
+
+        Start-Sleep -Seconds 20
+    }
+
+    throw "Timed out after $TimeoutMinutes minutes while waiting for GitHub release '$TagName'. Check https://github.com/$Repository/actions"
 }
 
 function ConvertFrom-SemanticVersion {
@@ -219,6 +363,12 @@ try
     }
 
     $null = Invoke-Git -Arguments @('fetch', '--tags', $Remote)
+    $remoteUrl = (Invoke-Git -Arguments @('remote', 'get-url', $Remote)).Output[0].Trim()
+    $githubRepository = Get-GitHubRepository -RemoteUrl $remoteUrl
+    if (-not $NoWait -and [string]::IsNullOrWhiteSpace($githubRepository))
+    {
+        throw "Remote '$Remote' is not a recognized GitHub URL. Use -NoWait to push without GitHub release verification."
+    }
 
     [xml]$project = Get-Content -Raw -LiteralPath $projectPath
     $versionNode = $project.SelectSingleNode('/Project/PropertyGroup/Version')
@@ -373,14 +523,27 @@ try
 
     $null = Invoke-Git -Arguments @('push', $Remote, "refs/tags/$tagName")
 
-    $remoteUrl = (Invoke-Git -Arguments @('remote', 'get-url', $Remote)).Output[0].Trim()
-    if ($remoteUrl -match '^https://github\.com/(?<repository>.+?)(?:\.git)?$')
+    if (-not [string]::IsNullOrWhiteSpace($githubRepository))
     {
-        $repositoryUrl = "https://github.com/$($Matches.repository)"
+        $repositoryUrl = "https://github.com/$githubRepository"
         Write-Host "Release commit and tag '$tagName' were pushed successfully."
-        Write-Host 'The GitHub workflow is creating the ZIP, MSI, checksums, and release.'
         Write-Host "Workflow: $repositoryUrl/actions"
         Write-Host "Release:  $repositoryUrl/releases/tag/$tagName"
+
+        if ($NoWait)
+        {
+            Write-Host 'The GitHub workflow is creating the ZIP, MSI, checksums, and release.'
+        }
+        else
+        {
+            Write-Host 'Waiting for GitHub to publish the portable ZIP, MSI, and checksums ...'
+            Wait-GitHubRelease `
+                -Repository $githubRepository `
+                -TagName $tagName `
+                -CommitSha $head `
+                -ReleaseVersion $Version `
+                -TimeoutMinutes $ReleaseTimeoutMinutes
+        }
     }
     else
     {
