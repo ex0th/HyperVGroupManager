@@ -161,7 +161,9 @@ jobs:
           # devices must receive this public certificate through their managed trust policy.
           # Import-Certificate prompts before adding a root certificate. That prompt is not
           # visible on a hosted runner and would leave the job waiting until its timeout.
-          & certutil.exe -user -Silent -f -addstore Root $publicCertificatePath
+          # The force flag makes certutil non-interactive; -Silent is intentionally omitted
+          # because the addstore verb on windows-latest does not support that global option.
+          & certutil.exe -user -f -addstore Root $publicCertificatePath
           if ($LASTEXITCODE -ne 0) {
             throw "The private signing certificate could not be added to the temporary trusted root store (certutil exit code $LASTEXITCODE)."
           }
