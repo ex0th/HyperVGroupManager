@@ -13,6 +13,7 @@ jobs:
   release:
     name: Build portable ZIP and MSI release
     runs-on: windows-latest
+    timeout-minutes: 30
     environment: release
 
     env:
@@ -158,9 +159,12 @@ jobs:
 
           # The runner trusts the private certificate only for build-time verification. End-user
           # devices must receive this public certificate through their managed trust policy.
-          Import-Certificate `
-            -FilePath $publicCertificatePath `
-            -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+          # Import-Certificate prompts before adding a root certificate. That prompt is not
+          # visible on a hosted runner and would leave the job waiting until its timeout.
+          & certutil.exe -user -Silent -f -addstore Root $publicCertificatePath
+          if ($LASTEXITCODE -ne 0) {
+            throw "The private signing certificate could not be added to the temporary trusted root store (certutil exit code $LASTEXITCODE)."
+          }
 
           "SIGNING_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
