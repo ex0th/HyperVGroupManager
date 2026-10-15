@@ -22,7 +22,7 @@
     try {
         $target = Resolve-HVGMTarget -TargetName $TargetName
         $vm = Get-HVGMVmById -Target $target -VmId $VmId
-        $group = Get-HVGMGroupById -Target $target -GroupId $GroupId -GroupName $GroupName
+        $group = Get-HVGMGroupById -Target $target -GroupId $GroupId -GroupName $GroupName -HostName $vm.ComputerName
 
         $warnings = @()
         $alreadyMember = @($group.VMMembers | Where-Object { $_.Id -eq $vm.Id })

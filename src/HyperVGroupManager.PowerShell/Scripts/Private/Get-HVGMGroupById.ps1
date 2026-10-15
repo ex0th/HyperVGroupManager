@@ -14,14 +14,21 @@
         [Parameter(Mandatory)]
         [guid]$GroupId,
 
-        [string]$GroupName = $null
+        [string]$GroupName = $null,
+
+        # Host, auf dem die Gruppe aufgelöst werden soll. Für Mitgliedschaftsänderungen muss das
+        # der Host der VM sein: Add-/Remove-VMGroupMember schlägt mit "The operation failed."
+        # fehl, wenn VM und Gruppe aus unterschiedlichen Nodes stammen.
+        [string]$HostName = $null
     )
 
     if ($GroupId -eq [guid]::Empty) {
         throw 'The group ID must not be empty.'
     }
 
-    $hostName = Get-HVGMGroupHostName -Target $Target
+    if ([string]::IsNullOrEmpty($HostName)) {
+        $HostName = Get-HVGMGroupHostName -Target $Target
+    }
 
     $group = Get-VMGroup -ComputerName $hostName -Id $GroupId -ErrorAction SilentlyContinue
     if ($group) { return $group }
