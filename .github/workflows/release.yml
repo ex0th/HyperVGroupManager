@@ -109,6 +109,7 @@ jobs:
 
       - name: Prepare private PFX signing certificate
         if: steps.signing.outputs.mode == 'pfx'
+        timeout-minutes: 3
         shell: pwsh
         env:
           SIGNING_CERTIFICATE_BASE64: ${{ secrets.CODE_SIGNING_CERTIFICATE_BASE64 }}
@@ -159,13 +160,22 @@ jobs:
 
           # The runner trusts the private certificate only for build-time verification. End-user
           # devices must receive this public certificate through their managed trust policy.
-          # Import-Certificate prompts before adding a root certificate. That prompt is not
-          # visible on a hosted runner and would leave the job waiting until its timeout.
-          # The force flag makes certutil non-interactive; -Silent is intentionally omitted
-          # because the addstore verb on windows-latest does not support that global option.
-          & certutil.exe -user -f -addstore Root $publicCertificatePath
-          if ($LASTEXITCODE -ne 0) {
-            throw "The private signing certificate could not be added to the temporary trusted root store (certutil exit code $LASTEXITCODE)."
+          # Windows always shows a security dialog when a certificate is added to the
+          # CurrentUser\Root store (certutil -f and Import-Certificate cannot suppress it). On a
+          # hosted runner that dialog is invisible and the job hangs until its timeout. The
+          # LocalMachine\Root store has no such prompt; hosted runners run with admin rights.
+          $rootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+            [System.Security.Cryptography.X509Certificates.StoreName]::Root,
+            [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
+          try {
+            $rootStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+            $rootStore.Add([System.Security.Cryptography.X509Certificates.X509Certificate2]::new($publicCertificatePath))
+          }
+          catch {
+            throw "The private signing certificate could not be added to the temporary trusted root store. $($_.Exception.Message)"
+          }
+          finally {
+            $rootStore.Close()
           }
 
           "SIGNING_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -426,7 +436,7 @@ jobs:
         shell: pwsh
         run: |
           if (-not [string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE_THUMBPRINT)) {
-            $trustedCertificate = Join-Path 'Cert:\CurrentUser\Root' $env:SIGNING_CERTIFICATE_THUMBPRINT
+            $trustedCertificate = Join-Path 'Cert:\LocalMachine\Root' $env:SIGNING_CERTIFICATE_THUMBPRINT
             if (Test-Path -LiteralPath $trustedCertificate) {
               Remove-Item -LiteralPath $trustedCertificate -Force
             }
